@@ -1,0 +1,159 @@
+{
+  "name": "VayuVani — AQI Data Pipeline",
+  "nodes": [
+    {
+      "id": "schedule-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [250, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "minutes", "minutesInterval": 15 }]
+        }
+      }
+    },
+    {
+      "id": "fetch-openaq",
+      "name": "Fetch OpenAQ Delhi",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.openaq.org/v3/locations",
+        "queryParameters": {
+          "parameters": [
+            { "name": "coordinates", "value": "28.6139,77.2090" },
+            { "name": "radius",      "value": "55000" },
+            { "name": "limit",       "value": "200" }
+          ]
+        },
+        "options": { "timeout": 15000 }
+      }
+    },
+    {
+      "id": "fetch-cpcb",
+      "name": "Fetch CPCB Delhi",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [500, 400],
+      "parameters": {
+        "method": "GET",
+        "url": "https://api.cpcbccr.nic.in/caaqms/getStationData",
+        "queryParameters": {
+          "parameters": [
+            { "name": "apiKey",   "value": "={{ $env.CPCB_API_KEY }}" },
+            { "name": "stateId",  "value": "Delhi" },
+            { "name": "cityId",   "value": "Delhi" }
+          ]
+        },
+        "options": {
+          "timeout": 20000,
+          "response": { "response": { "neverError": true } }
+        }
+      }
+    },
+    {
+      "id": "extract-location-ids",
+      "name": "Extract Location IDs",
+      "type": "n8n-nodes-base.code",
+      "position": [750, 200],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst results = data.results || [];\nreturn results.map(loc => ({\n  json: {\n    locationId: loc.id,\n    name: loc.name,\n    latitude: loc.coordinates?.latitude,\n    longitude: loc.coordinates?.longitude,\n  }\n}));"
+      }
+    },
+    {
+      "id": "fetch-latest-per-station",
+      "name": "Fetch Latest Per Station",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1000, 200],
+      "parameters": {
+        "method": "GET",
+        "url": "=https://api.openaq.org/v3/locations/{{ $json.locationId }}/latest",
+        "options": { "timeout": 10000 }
+      }
+    },
+    {
+      "id": "normalize-openaq",
+      "name": "Normalize OpenAQ Readings",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 200],
+      "parameters": {
+        "jsCode": "const PARAM_MAP = { pm25:'pm25', pm10:'pm10', no2:'no2', so2:'so2', co:'co', o3:'o3', nh3:'nh3' };\nconst locationMeta = $('Extract Location IDs').item.json;\nconst data = $input.first().json;\nconst sensors = data.results || [];\n\nconst record = {\n  station_name: locationMeta.name,\n  latitude: locationMeta.latitude,\n  longitude: locationMeta.longitude,\n  source: 'openaq',\n  pm25: null, pm10: null, no2: null, so2: null, co: null, o3: null, nh3: null,\n  timestamp: new Date().toISOString(),\n};\n\nfor (const s of sensors) {\n  const paramName = s.parameter?.name?.toLowerCase();\n  const col = PARAM_MAP[paramName];\n  if (col) {\n    let val = s.value;\n    if (col === 'co' && s.parameter?.units === 'µg/m³') val = val / 1000;\n    record[col] = val;\n    const ts = s.datetime?.utc;\n    if (ts) record.timestamp = ts;\n  }\n}\n\nif (record.pm25 === null && record.pm10 === null) return [];\nreturn [{ json: record }];"
+      }
+    },
+    {
+      "id": "normalize-cpcb",
+      "name": "Normalize CPCB Readings",
+      "type": "n8n-nodes-base.code",
+      "position": [750, 400],
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst stations = data.stations || data.data || [];\nif (!stations.length) return [];\n\nreturn stations\n  .filter(s => s.latitude && s.longitude)\n  .map(s => ({\n    json: {\n      station_name: s.stationName || s.station_name || 'Unknown',\n      latitude: parseFloat(s.latitude),\n      longitude: parseFloat(s.longitude),\n      source: 'cpcb',\n      pm25: parseFloat(s['PM2.5'] || s.pm25) || null,\n      pm10: parseFloat(s['PM10']  || s.pm10) || null,\n      no2:  parseFloat(s['NO2']   || s.no2)  || null,\n      so2:  parseFloat(s['SO2']   || s.so2)  || null,\n      co:   parseFloat(s['CO']    || s.co)   || null,\n      o3:   parseFloat(s['Ozone'] || s.O3 || s.o3) || null,\n      nh3:  parseFloat(s['NH3']   || s.nh3)  || null,\n      timestamp: s.lastUpdated || new Date().toISOString(),\n    }\n  }))\n  .filter(r => r.json.pm25 !== null || r.json.pm10 !== null);"
+      }
+    },
+    {
+      "id": "merge-sources",
+      "name": "Merge Both Sources",
+      "type": "n8n-nodes-base.merge",
+      "position": [1000, 330],
+      "parameters": { "mode": "append" }
+    },
+    {
+      "id": "calculate-aqi",
+      "name": "Calculate India NAQI",
+      "type": "n8n-nodes-base.code",
+      "position": [1250, 330],
+      "parameters": {
+        "jsCode": "function subIndex(param, c) {\n  const BP = {\n    pm25: [[0,30,0,50],[30,60,51,100],[60,90,101,200],[90,120,201,300],[120,250,301,400],[250,500,401,500]],\n    pm10: [[0,50,0,50],[50,100,51,100],[100,250,101,200],[250,350,201,300],[350,430,301,400],[430,600,401,500]],\n    no2:  [[0,40,0,50],[40,80,51,100],[80,180,101,200],[180,280,201,300],[280,400,301,400],[400,800,401,500]],\n    so2:  [[0,40,0,50],[40,80,51,100],[80,380,101,200],[380,800,201,300],[800,1600,301,400],[1600,2620,401,500]],\n    co:   [[0,1,0,50],[1,2,51,100],[2,10,101,200],[10,17,201,300],[17,34,301,400],[34,58,401,500]],\n    o3:   [[0,50,0,50],[50,100,51,100],[100,168,101,200],[168,208,201,300],[208,748,301,400],[748,1000,401,500]],\n    nh3:  [[0,200,0,50],[200,400,51,100],[400,800,101,200],[800,1200,201,300],[1200,1800,301,400],[1800,2400,401,500]],\n  };\n  const bps = BP[param];\n  if (!bps || c == null) return null;\n  for (const [cl,ch,il,ih] of bps) {\n    if (cl <= c && c <= ch) return Math.round(il + (c-cl)/(ch-cl)*(ih-il));\n  }\n  return 500;\n}\n\nfunction category(aqi) {\n  if (aqi <= 50)  return 'Good';\n  if (aqi <= 100) return 'Satisfactory';\n  if (aqi <= 200) return 'Moderate';\n  if (aqi <= 300) return 'Poor';\n  if (aqi <= 400) return 'Very Poor';\n  return 'Severe';\n}\n\nconst r = $input.first().json;\nconst pollutants = ['pm25','pm10','no2','so2','co','o3','nh3'];\nconst indices = {};\n\nfor (const p of pollutants) {\n  const idx = subIndex(p, r[p]);\n  if (idx !== null) indices[p] = idx;\n}\n\nif (!Object.keys(indices).length) return [];\n\nconst dominant = Object.entries(indices).sort((a,b)=>b[1]-a[1])[0];\nreturn [{ json: { ...r, aqi: dominant[1], category: category(dominant[1]), dominant_pollutant: dominant[0] } }];"
+      }
+    },
+    {
+      "id": "upsert-supabase",
+      "name": "Upsert to Supabase",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1500, 330],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.SUPABASE_URL }}/rest/v1/aqi_readings",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "apikey",        "value": "={{ $env.SUPABASE_KEY }}" },
+            { "name": "Authorization", "value": "=Bearer {{ $env.SUPABASE_KEY }}" },
+            { "name": "Content-Type",  "value": "application/json" },
+            { "name": "Prefer",        "value": "resolution=merge-duplicates,return=minimal" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "station_id",         "value": "={{ $json.station_name }}" },
+            { "name": "timestamp",          "value": "={{ $json.timestamp }}" },
+            { "name": "pm25",               "value": "={{ $json.pm25 }}" },
+            { "name": "pm10",               "value": "={{ $json.pm10 }}" },
+            { "name": "no2",                "value": "={{ $json.no2 }}" },
+            { "name": "so2",                "value": "={{ $json.so2 }}" },
+            { "name": "co",                 "value": "={{ $json.co }}" },
+            { "name": "o3",                 "value": "={{ $json.o3 }}" },
+            { "name": "nh3",                "value": "={{ $json.nh3 }}" },
+            { "name": "aqi",                "value": "={{ $json.aqi }}" },
+            { "name": "category",           "value": "={{ $json.category }}" },
+            { "name": "dominant_pollutant", "value": "={{ $json.dominant_pollutant }}" },
+            { "name": "source",             "value": "={{ $json.source }}" }
+          ]
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes":           { "main": [[{ "node": "Fetch OpenAQ Delhi",         "type": "main", "index": 0 }, { "node": "Fetch CPCB Delhi", "type": "main", "index": 0 }]] },
+    "Fetch OpenAQ Delhi":         { "main": [[{ "node": "Extract Location IDs",       "type": "main", "index": 0 }]] },
+    "Extract Location IDs":       { "main": [[{ "node": "Fetch Latest Per Station",   "type": "main", "index": 0 }]] },
+    "Fetch Latest Per Station":   { "main": [[{ "node": "Normalize OpenAQ Readings",  "type": "main", "index": 0 }]] },
+    "Normalize OpenAQ Readings":  { "main": [[{ "node": "Merge Both Sources",         "type": "main", "index": 0 }]] },
+    "Fetch CPCB Delhi":           { "main": [[{ "node": "Normalize CPCB Readings",    "type": "main", "index": 0 }]] },
+    "Normalize CPCB Readings":    { "main": [[{ "node": "Merge Both Sources",         "type": "main", "index": 1 }]] },
+    "Merge Both Sources":         { "main": [[{ "node": "Calculate India NAQI",       "type": "main", "index": 0 }]] },
+    "Calculate India NAQI":       { "main": [[{ "node": "Upsert to Supabase",         "type": "main", "index": 0 }]] }
+  },
+  "settings": { "saveManualExecutions": true, "callerPolicy": "workflowsFromSameOwner" },
+  "tags": [{ "name": "vayuvani" }, { "name": "aqi" }]
+}
