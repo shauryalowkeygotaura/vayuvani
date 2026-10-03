@@ -1,25 +1,29 @@
 """
 Advisory generator — Python version for testing.
-Production version lives in vayuvani-app/lib/advisory.ts (AI SDK + Vercel AI Gateway).
+Production version lives in vayuvani-app/lib/advisory.ts (Groq, model switching).
 
-Uses Anthropic Python SDK directly for standalone testing.
-Set ANTHROPIC_API_KEY in .env before running test_samples.py.
+Uses the vault's shared Groq pool (advisory/groq_pool.py, vendored by
+Scripts/sync_groq_pool.py): key rotation across accounts, model fallback on a
+retired or throttled model. Was the Anthropic SDK until 2026-10-03.
+Set GROQ_API_KEY (Doppler or .env) before running test_samples.py.
 """
 
 import os
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Optional
-import anthropic
 from dotenv import load_dotenv
 
+from . import groq_pool
 from .prompts import AdvisoryInput, build_prompt, time_of_day
 
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-# Fast + cheap — good enough for advisory generation
-MODEL = "claude-haiku-4-5-20251001"
+# Fast tier first: qwen answers in ~0.5s with no hidden reasoning tokens, and
+# the pool walks to gpt-oss if it is retired or throttled.
+MODELS = ("qwen/qwen3.8-27b", "openai/gpt-oss-20b", "openai/gpt-oss-120b")
 
 
 def generate_advisory(
@@ -56,20 +60,43 @@ def generate_advisory(
 
     prompt = build_prompt(inp)
 
-    client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-
     try:
-        message = client.messages.create(
-            model=MODEL,
-            max_tokens=200,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = message.content[0].text.strip()
+        text = ""
+        # One model at a time so a reply that fails the language check can be
+        # handed to the next model; the pool still rotates keys and waits out
+        # throttles inside each call.
+        for model in MODELS:
+            resp = groq_pool.chat(
+                (model,),
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=200,
+                require_content=True,
+            )
+            text = (resp.choices[0].message.content or "").strip()
+            if text and _reads_clean(text, language):
+                break
+            logger.warning(f"{model} gave an unusable {language} advisory; trying next model")
+            text = ""
+        if not text:
+            raise ValueError("no clean advisory from any model")
         logger.info(f"Advisory generated for {neighborhood} ({category}): {len(text)} chars")
         return text
     except Exception as e:
         logger.error(f"Advisory generation failed: {e}")
         return _fallback_advisory(category, language)
+
+
+# Latin words allowed inside a Hindi advisory. Anything else Latin is a model
+# glitch: qwen once dropped a Turkish word ("özellikle") mid-sentence, which a
+# Hindi-speaking caller would hear read aloud.
+_ALLOWED_LATIN = {"n95", "aqi", "pm", "pm2", "pm10", "no2", "who", "cpcb"}
+
+
+def _reads_clean(text: str, language: str) -> bool:
+    if language != "hi":
+        return True
+    words = re.findall(r"[A-Za-zÀ-ɏ]+", text)
+    return all(w.lower() in _ALLOWED_LATIN or len(w) <= 2 for w in words)
 
 
 def _fallback_advisory(category: str, language: str) -> str:
