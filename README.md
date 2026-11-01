@@ -10,7 +10,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Fill SUPABASE_URL and SUPABASE_KEY in .env
 
-# 1. Set up database (paste supabase/schema.sql into Supabase SQL editor)
+# 1. Set up database (paste supabase/migrations/001_base.sql into Supabase SQL editor)
 
 # 2. Seed stations (one-time)
 python -m pipeline.seed_stations

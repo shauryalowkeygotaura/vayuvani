@@ -9,7 +9,7 @@ Read `CLAUDE.md`, then this file (`NEXT.md`), then `docs/KAUN.md`. Work top to b
 - [ ] `DATA_GOV_IN_API_KEY` (CPCB): not yet. Shaurya is getting it. Code must keep working without it (OpenAQ only).
 
 ## Step 0: Shaurya, manual (blocking for steps 2+)
-- [ ] Paste `supabase/kaun_schema.sql` into the Supabase SQL editor and run it. (No DB password available to automate this.)
+- [ ] Paste `supabase/migrations/002_kaun.sql` into the Supabase SQL editor and run it. (No DB password available to automate this.)
 - [ ] In the cloud environment's network settings, allow: `api.openaq.org`, `firms.modaps.eosdis.nasa.gov`, `api.open-meteo.com`, `archive-api.open-meteo.com`, `api.data.gov.in`, and the Supabase project host. Without this, cloud sessions stay offline and can't do steps 2-4.
 
 ## Step 1: make the tests honest (no network needed)

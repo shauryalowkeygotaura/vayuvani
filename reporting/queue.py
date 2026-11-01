@@ -8,7 +8,7 @@ Flow:
 2. A human reviews the pack and approves with ONE tap: the "Kaun approve"
    GitHub Actions workflow (workflow_dispatch, input = complaint id), runnable
    from the GitHub mobile app. That is the approve link stored on each row.
-   Locally: python -m attribution.routing.queue approve <id>
+   Locally: python -m reporting.queue approve <id>
 3. send_approved(): only rows with status "approved" AND approved_by set are
    rendered into an outbox file. Delivery itself (email/WhatsApp/portal) is
    left as a manual step until agency channels are verified; there is no code
@@ -22,8 +22,8 @@ import os
 import re
 from datetime import datetime, timezone
 
-from ..config import REPO_SLUG, STATE_DIR
-from ..store import get_store
+from attribution.config import REPO_SLUG, STATE_DIR
+from attribution.store import get_store
 from . import evidence
 from .agencies import NOT_ROUTABLE, agencies_for, contacts
 

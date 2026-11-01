@@ -10,8 +10,8 @@ import os
 from datetime import timedelta, timezone
 from typing import Optional
 
-from ..config import PUBLIC_DIR
-from ..engine.attribute import LABELS_EN
+from attribution.config import PUBLIC_DIR
+from attribution.engine.attribute import LABELS_EN
 from .agencies import agencies_for
 
 IST = timezone(timedelta(hours=5, minutes=30))

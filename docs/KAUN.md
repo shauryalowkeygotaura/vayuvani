@@ -28,7 +28,7 @@ preflight -> ingest -> attribute -> queue -> publish -> GitHub Pages
 
 ## Setup (one time)
 
-1. Supabase SQL editor: run `supabase/kaun_schema.sql`.
+1. Supabase SQL editor: run `supabase/migrations/002_kaun.sql`.
 2. GitHub repo secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service_role, not anon), `OPENAQ_API_KEY`,
    `FIRMS_MAP_KEY`; optional `DATA_GOV_IN_API_KEY`, `KAUN_AGENCY_CONTACTS`.
 3. Settings -> Pages -> Source: **GitHub Actions**.

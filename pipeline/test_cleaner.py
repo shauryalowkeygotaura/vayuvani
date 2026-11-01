@@ -58,12 +58,13 @@ class TestClean:
     def test_timestamp_normalized_to_iso(self):
         result = clean(_base_record(timestamp="2026-03-26T10:00:00Z"))
         assert result is not None
-        assert "+" in result["timestamp"] or result["timestamp"].endswith("Z") or "UTC" not in result["timestamp"]
+        # The cleaner emits "ts" (the key pipeline/db.py upserts on), normalised to UTC ISO.
+        assert result["ts"] == "2026-03-26T10:00:00+00:00"
 
     def test_missing_timestamp_uses_now(self):
         result = clean(_base_record(timestamp=None))
         assert result is not None
-        assert result["timestamp"] is not None
+        assert result["ts"] is not None
 
     def test_aqi_calculated_correctly(self):
         # pm25=85 → sub-index in Poor range (201-300)

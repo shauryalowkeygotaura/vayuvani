@@ -7,7 +7,7 @@ Two backends with the same interface:
 - LocalStore: CSV files under STATE_DIR. Used for development, tests, and as a
   dry-run backend when Supabase is not configured.
 
-Tables (see supabase/kaun_schema.sql):
+Tables (see supabase/migrations/002_kaun.sql):
     hourly_obs       (station_id, hour)            pollutants per station-hour
     wind_obs         (station_id, hour)            wind speed/direction
     fire_points      (source, latitude, longitude, acq_time)

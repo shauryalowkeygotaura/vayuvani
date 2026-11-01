@@ -2,7 +2,7 @@
 
 import pytest
 
-from attribution.routing import agencies, evidence, queue
+from reporting import agencies, evidence, queue
 from attribution.store import LocalStore
 
 

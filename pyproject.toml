@@ -1,0 +1,10 @@
+[project]
+name = "vayuvani"
+version = "0.2.0"
+description = "Delhi air quality by phone, with hourly source attribution (Kaun?) and agency reporting."
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["pipeline", "attribution", "voice", "reporting", "api"]
+python_files = ["test_*.py"]
+addopts = "-q"

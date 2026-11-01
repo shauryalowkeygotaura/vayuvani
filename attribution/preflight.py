@@ -77,7 +77,7 @@ def check(require_supabase: bool = True, require_firms: bool = True) -> list[str
                                       "never the anon key"))
             except http.ExternalError as e:
                 problems.append(_fail(f"Supabase check failed: {e}",
-                                      "run supabase/kaun_schema.sql in the Supabase SQL editor"))
+                                      "run supabase/migrations/002_kaun.sql in the Supabase SQL editor"))
 
     # CPCB via data.gov.in is optional.
     from .ingest.cpcb import api_key

@@ -131,7 +131,7 @@ def publish(store, now: datetime, run_meta: dict, root: str = None) -> list[str]
 
 def hourly(args) -> int:
     from .preflight import check
-    from .routing import queue
+    from reporting import queue
 
     now = datetime.now(timezone.utc)
     until = _floor_hour(now)
@@ -200,7 +200,7 @@ def demo(args) -> int:
     from . import synthetic
     from .engine import attribute as engine
     from .publish import voice
-    from .routing import evidence
+    from reporting import evidence
 
     root = args.out or tempfile.mkdtemp(prefix="kaun-demo-")
     store = LocalStore(os.path.join(root, "db"))

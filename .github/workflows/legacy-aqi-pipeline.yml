@@ -1,0 +1,26 @@
+name: Legacy AQI pipeline (manual)
+
+# Retired from cron on 2026-11-01: Kaun's hourly job (kaun.yml) now ingests the
+# same OpenAQ stations, and two jobs on one OpenAQ key fight over the 60/min
+# limit. Kept for manual runs that need the old aqi_readings table.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements-engine.txt
+      - name: Run pipeline (single fetch)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
+          OPENAQ_API_KEY: ${{ secrets.OPENAQ_API_KEY }}
+          CPCB_API_KEY: ${{ secrets.DATA_GOV_IN_API_KEY }}
+        run: python -m pipeline.scheduler --once

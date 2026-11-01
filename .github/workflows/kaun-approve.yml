@@ -26,7 +26,7 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-engine.txt
       - name: Approve and render outbox
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -36,7 +36,7 @@ jobs:
           APPROVER: ${{ inputs.approver }}
         # Inputs go through env vars, never interpolated into the shell line;
         # queue.approve() whitelists both before they reach a query.
-        run: python -m attribution.routing.queue approve "$ATTRIBUTION_ID" --by "$APPROVER"
+        run: python -m reporting.queue approve "$ATTRIBUTION_ID" --by "$APPROVER"
       - uses: actions/upload-artifact@v4
         with:
           name: outbox

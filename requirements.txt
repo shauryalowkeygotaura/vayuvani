@@ -1,9 +1,3 @@
-requests==2.32.3
-supabase==2.9.1
-python-dotenv==1.0.1
-apscheduler==3.10.4
-python-dateutil==2.9.0
-groq>=0.11
-numpy>=2.0
-pandas>=2.2
-pytest>=8.0
+# Runtime for the Vercel voice webhook (api/vapi.py). Standard library only, on
+# purpose: no cold-start penalty inside the 2 s VAPI budget.
+# Everything else (engine, cron, tests) is in requirements-engine.txt.
