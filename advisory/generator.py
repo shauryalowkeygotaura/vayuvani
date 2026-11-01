@@ -37,11 +37,35 @@ def generate_advisory(
     dominant_pollutant: str,
     language: str = "en",
     hour_utc: Optional[int] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> str:
     """
     Generate a plain-language health advisory for voice output.
     Returns the advisory string, or a safe fallback if generation fails.
+    With caller coordinates, appends the "Kaun?" line (who caused the latest
+    nearby spike) from the attribution feed: a template, no extra LLM call.
     """
+    advisory = _generate(neighborhood, station_name, aqi, category, pm25, pm10, no2,
+                         dominant_pollutant, language, hour_utc)
+    return with_kaun(advisory, latitude, longitude, language)
+
+
+def with_kaun(advisory: str, latitude: Optional[float], longitude: Optional[float],
+              language: str) -> str:
+    if latitude is None or longitude is None:
+        return advisory
+    try:
+        from attribution.publish.voice import answer
+        line = answer(latitude, longitude, language)
+    except Exception as e:  # the advisory must never fail because of Kaun
+        logger.warning(f"Kaun line skipped: {e}")
+        return advisory
+    return f"{advisory} {line}" if line else advisory
+
+
+def _generate(neighborhood, station_name, aqi, category, pm25, pm10, no2,
+              dominant_pollutant, language, hour_utc) -> str:
     if hour_utc is None:
         hour_utc = datetime.now(timezone.utc).hour
 
