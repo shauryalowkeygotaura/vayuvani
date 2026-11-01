@@ -51,11 +51,25 @@ def merge_sources(openaq_rows: list[dict], cpcb_rows: list[dict]) -> list[dict]:
     return list(merged.values())
 
 
+def merge_wind(station_rows: list[dict], model_rows: list[dict]) -> list[dict]:
+    """
+    Station-measured wind wins (it is the mast at the monitor); Open-Meteo fills
+    hours and stations without it, and always supplies boundary-layer height.
+    """
+    merged = {(r["station_id"], r["hour"]): dict(r) for r in model_rows}
+    for r in station_rows:
+        key = (r["station_id"], r["hour"])
+        m = merged.setdefault(key, {"station_id": r["station_id"], "hour": r["hour"], "pbl_height": None})
+        m["wind_speed"], m["wind_dir"] = r["wind_speed"], r["wind_dir"]
+        m["source"] = "station"
+    return list(merged.values())
+
+
 def ingest(store, ckpt: Checkpoint, since: datetime, until: datetime, archive: bool = False) -> dict:
     from .ingest import cpcb, firms, openaq, wind
 
     stations = openaq.fetch_locations()
-    oa_rows = openaq.fetch_hourly(stations, since, until)
+    oa_rows, station_wind = openaq.fetch_hourly(stations, since, until)
 
     cp_rows, cp_stations = ([], []) if archive else cpcb.fetch()
     if cp_rows:
@@ -82,7 +96,7 @@ def ingest(store, ckpt: Checkpoint, since: datetime, until: datetime, archive: b
         w = wind.fetch_archive(all_stations, since.strftime("%Y-%m-%d"), (until - timedelta(hours=1)).strftime("%Y-%m-%d"))
     else:
         w = wind.fetch(all_stations, past_days=max(1, (until - since).days + 1))
-    w = [r for r in w if since <= r["hour"] < until]
+    w = merge_wind(station_wind, [r for r in w if since <= r["hour"] < until])
     store.upsert("wind_obs", w)
 
     if archive:
@@ -124,9 +138,14 @@ def attribute(store, now: datetime, since: datetime) -> list[dict]:
 
 def publish(store, now: datetime, run_meta: dict, root: str = None) -> list[str]:
     from .publish import feed
+    from .publish import now as now_feed
 
+    stations = load_stations(store)
     rows = store.select("attributions", {"window_start": f"gte.{(now - timedelta(days=8)).isoformat()}"})
-    return feed.write(feed.build(rows, load_stations(store), now=now, run_meta=run_meta), root=root)
+    paths = feed.write(feed.build(rows, stations, now=now, run_meta=run_meta), root=root)
+    obs = _frame(store.select("hourly_obs", {"hour": f"gte.{(now - timedelta(hours=26)).isoformat()}"}))
+    paths.append(now_feed.write(now_feed.build(obs, stations, now=now), root=root))
+    return paths
 
 
 def hourly(args) -> int:

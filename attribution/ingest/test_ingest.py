@@ -27,36 +27,68 @@ def test_slug_matches_across_sources():
 NOW = datetime(2026, 11, 1, 6, tzinfo=timezone.utc)
 
 
-def test_openaq_locations_parse_and_filters():
-    page = {"results": [
-        {"id": 1, "name": "Anand Vihar, Delhi - DPCC", "coordinates": {"latitude": 28.64, "longitude": 77.31},
-         "datetimeLast": {"utc": "2026-11-01T05:00:00Z"},
-         "sensors": [{"id": 11, "parameter": {"name": "pm25", "units": "µg/m³"}},
-                     {"id": 12, "parameter": {"name": "co", "units": "µg/m³"}},
-                     {"id": 13, "parameter": {"name": "temperature", "units": "c"}}]},
-        {"id": 2, "name": "Dead station", "coordinates": {"latitude": 28.6, "longitude": 77.2},
-         "datetimeLast": {"utc": "2024-01-01T00:00:00Z"},
-         "sensors": [{"id": 21, "parameter": {"name": "pm25", "units": "µg/m³"}}]},
-        {"id": 3, "name": "No coords", "coordinates": {}, "sensors": []},
-    ]}
-    st = openaq.parse_locations([page, page], now=NOW)
-    assert len(st) == 1
-    assert set(m["param"] for m in st[0]["sensors"].values()) == {"pm25", "co"}
+FIX = __import__("os").path.join(__import__("os").path.dirname(__file__), "fixtures")
+
+
+def _fixture(name):
+    import json, os
+    with open(os.path.join(FIX, name), encoding="utf-8") as f:
+        return json.load(f) if name.endswith(".json") else f.read()
+
+
+def test_openaq_locations_real_response():
+    """Real /locations payload (2026-11-01): dead, duplicate and low-cost sites dropped."""
+    st = openaq.parse_locations([_fixture("openaq_locations_2026-11-01.json")], now=NOW)
+    assert [s["name"] for s in st] == ["R K Puram, Delhi - DPCC"]
+    sensors = st[0]["sensors"]
+    assert set(sensors) >= {"pm25", "pm10", "no2", "co", "so2", "o3", "wind_speed", "wind_direction"}
+    ids = [x["id"] for x in sensors["pm25"]]
+    assert ids == sorted(ids, reverse=True) and len(ids) == 2      # newest sensor tried first
     with pytest.raises(http.BadResponse):
         openaq.parse_locations([{"detail": "error"}])
 
 
-def test_openaq_hours_parse():
+def test_openaq_hours_real_response_ppb_and_labels():
+    rows = openaq.parse_hours(_fixture("openaq_hours_no2_ppb_2026-11-01.json"), "no2", "ppb")
+    assert rows
+    hour, value = rows[0]
+    # 19:30-20:30 UTC period -> labelled 20:00; 57 ppb NO2 -> ~107 ug/m3
+    assert hour == datetime(2026, 10, 31, 20, tzinfo=timezone.utc)
+    assert value == pytest.approx(57.0 * 46.01 / 24.45, rel=1e-3)
+
+
+def test_openaq_hours_parse_edge_cases():
     payload = {"results": [
         {"value": 1200, "parameter": {"units": "µg/m³"},
-         "period": {"datetimeFrom": {"utc": "2026-11-01T04:00:00Z"}, "datetimeTo": {"utc": "2026-11-01T05:00:00Z"}}},
-        {"value": None, "period": {"datetimeFrom": {"utc": "2026-11-01T05:00:00Z"}}},
+         "period": {"datetimeFrom": {"utc": "2026-11-01T04:30:00Z"}}},
+        {"value": None, "period": {"datetimeFrom": {"utc": "2026-11-01T05:30:00Z"}}},
         {"value": 5, "period": {}},
     ]}
     rows = openaq.parse_hours(payload, "co", "µg/m³")
-    assert rows == [(datetime(2026, 11, 1, 4, tzinfo=timezone.utc), pytest.approx(1.2))]
+    assert rows == [(datetime(2026, 11, 1, 5, tzinfo=timezone.utc), pytest.approx(1.2))]
+    assert openaq.parse_hours({"results": [{"value": 400, "period": {"datetimeFrom": {"utc": "2026-11-01T04:30:00Z"}}}]},
+                              "wind_direction", "deg") == []
     with pytest.raises(http.BadResponse):
         openaq.parse_hours({"oops": 1}, "co", None)
+
+
+def test_openaq_fetch_hourly_falls_through_dead_sensor(monkeypatch):
+    calls = []
+
+    def fake(sensor_id, since, until):
+        calls.append(sensor_id)
+        if sensor_id == 2:
+            return {"results": []}
+        return {"results": [{"value": 100, "parameter": {"units": "µg/m³"},
+                             "period": {"datetimeFrom": {"utc": "2026-11-01T04:30:00Z"}}}]}
+
+    monkeypatch.setattr(openaq, "_fetch_sensor", fake)
+    monkeypatch.setattr(openaq.time, "sleep", lambda s: None)
+    st = [{"id": "a", "name": "A", "sensors": {"pm25": [{"id": 2, "units": "µg/m³"}, {"id": 1, "units": "µg/m³"}],
+                                               "pm10": [{"id": 3, "units": "µg/m³"}, {"id": 4, "units": "µg/m³"}]}}]
+    rows, wind_rows = openaq.fetch_hourly(st, NOW, NOW)
+    assert calls == [2, 1, 3]                     # pm25 fell through; pm10 stopped at first hit
+    assert rows[0]["pm25"] == 100 and wind_rows == []
 
 
 def test_cpcb_parse():
@@ -76,8 +108,8 @@ def test_cpcb_parse():
     rows, stations = cpcb.parse_records(recs)
     assert len(rows) == 1 and len(stations) == 1
     r = rows[0]
-    # 11:00 IST end-of-hour -> 10:00 IST start -> 04:30 UTC -> floored 04:00 UTC
-    assert r["hour"] == datetime(2026, 11, 1, 4, tzinfo=timezone.utc)
+    # 10:00-11:00 IST average -> midpoint 05:00 UTC
+    assert r["hour"] == datetime(2026, 11, 1, 5, tzinfo=timezone.utc)
     assert r["pm25"] == 250 and r["co"] == pytest.approx(2.1)
 
 
@@ -104,6 +136,18 @@ def test_firms_parse():
     assert firms.parse_csv("", "X") == []
     with pytest.raises(http.BadResponse):
         firms.parse_csv("Invalid MAP_KEY.", "VIIRS_SNPP_NRT")
+
+
+def test_firms_real_response():
+    rows = firms.parse_csv(_fixture("firms_viirs_snpp_2026-11-01.csv"), "VIIRS_SNPP_NRT")
+    assert rows and all(r["dist_km"] <= 300 for r in rows)
+    assert all(r["confidence"] in ("low", "nominal", "high") for r in rows)
+
+
+def test_wind_real_response():
+    rows = wind.parse(_fixture("openmeteo_2stations_2026-11-01.json"), [{"id": "a"}, {"id": "b"}])
+    assert rows and {r["station_id"] for r in rows} == {"a", "b"}
+    assert all(0 <= r["wind_dir"] < 360 for r in rows)
 
 
 def test_firms_geometry():

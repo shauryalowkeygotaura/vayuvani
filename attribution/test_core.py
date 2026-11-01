@@ -90,6 +90,7 @@ def test_hourly_end_to_end_offline(tmp_path, monkeypatch):
     monkeypatch.setattr("attribution.store.STATE_DIR", str(tmp_path))
     monkeypatch.setattr("attribution.checkpoint.STATE_DIR", str(tmp_path))
     monkeypatch.setattr("attribution.publish.feed.PUBLIC_DIR", str(tmp_path / "public"))
+    monkeypatch.setattr("attribution.publish.now.PUBLIC_DIR", str(tmp_path / "public"))
     monkeypatch.setattr("reporting.evidence.PUBLIC_DIR", str(tmp_path / "public"))
 
     now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
@@ -109,6 +110,8 @@ def test_hourly_end_to_end_offline(tmp_path, monkeypatch):
     feed = json.loads((tmp_path / "public" / "data" / "latest.json").read_text())
     assert feed["attributions"], "expected recent attributions in the feed"
     assert all(a["confidence"] in ("low", "medium", "high") for a in feed["attributions"])
+    now_feed = json.loads((tmp_path / "public" / "data" / "now.json").read_text())
+    assert now_feed["stations"] and all(s["aqi"] for s in now_feed["stations"])
     ck = Checkpoint(str(tmp_path / "checkpoint.json"))
     assert ck.get("ingest") == now and ck.get("publish") == now
     q = LocalStore(str(tmp_path / "db")).select("complaint_queue")

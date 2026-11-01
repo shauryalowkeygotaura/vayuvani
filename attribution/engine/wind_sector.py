@@ -16,15 +16,9 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from ..labels import SECTORS_EN, SECTORS_HI  # noqa: F401 (re-exported)
+
 SECTORS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
-SECTORS_HI = {
-    "N": "उत्तर", "NE": "उत्तर-पूर्व", "E": "पूर्व", "SE": "दक्षिण-पूर्व",
-    "S": "दक्षिण", "SW": "दक्षिण-पश्चिम", "W": "पश्चिम", "NW": "उत्तर-पश्चिम",
-}
-SECTORS_EN = {
-    "N": "north", "NE": "north-east", "E": "east", "SE": "south-east",
-    "S": "south", "SW": "south-west", "W": "west", "NW": "north-west",
-}
 CALM_MS = 1.0
 SPEED_BINS = (0.0, 1.0, 3.0, 6.0, np.inf)
 

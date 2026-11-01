@@ -14,8 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from ..config import PUBLIC_DIR
-from ..engine.attribute import CONF_HI, LABELS_EN, LABELS_HI
-from ..engine.wind_sector import SECTORS_EN, SECTORS_HI
+from ..labels import CONF_HI, LABELS_EN, LABELS_HI, SECTORS_EN, SECTORS_HI
 
 MAX_AGE_HOURS = 12
 

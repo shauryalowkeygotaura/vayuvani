@@ -17,31 +17,13 @@ import pandas as pd
 
 from ..config import NMF_WINDOW_DAYS, POLLUTANTS
 from ..ingest import traffic
+from ..labels import CONF_HI, LABELS_EN, LABELS_HI
 from . import confidence, factors, fingerprints, regional, spikes, wind_sector
 
 logger = logging.getLogger(__name__)
 
 ENGINE_VERSION = "kaun-0.1"
 IST = timezone(timedelta(hours=5, minutes=30))
-
-LABELS_EN = {
-    "traffic": "traffic exhaust",
-    "biomass_burning": "biomass/garbage burning",
-    "industry": "industry/power (SO2)",
-    "dust": "construction/road dust",
-    "regional_background": "regional background",
-    "transported_smoke": "smoke transported from upwind fires",
-}
-LABELS_HI = {
-    "traffic": "गाड़ियों का धुआं",
-    "biomass_burning": "कचरा/लकड़ी जलाना",
-    "industry": "उद्योग/बिजलीघर",
-    "dust": "निर्माण/सड़क की धूल",
-    "regional_background": "पूरे इलाके का प्रदूषण",
-    "transported_smoke": "दूर की आग का धुआं",
-}
-CONF_HI = {"low": "कम", "medium": "मध्यम", "high": "अधिक"}
-
 
 def merge_obs(obs: pd.DataFrame, wind: pd.DataFrame) -> pd.DataFrame:
     obs = obs.copy()

@@ -51,7 +51,8 @@ def _parse_last_update(raw: str) -> Optional[datetime]:
 def parse_records(records: list[dict]) -> tuple[list[dict], list[dict]]:
     """
     Returns (hourly_rows, stations). `last_update` is the end of the averaging
-    hour in IST; we key rows on the hour START in UTC to match OpenAQ.
+    hour in IST; rows are labelled by the UTC hour nearest the averaging
+    midpoint (end - 30 min), the same convention as OpenAQ ingest.
     """
     rows: dict[tuple[str, datetime], dict] = {}
     stations: dict[str, dict] = {}
@@ -77,7 +78,7 @@ def parse_records(records: list[dict]) -> tuple[list[dict], list[dict]]:
             stations[sid] = {"id": sid, "name": name, "latitude": lat, "longitude": lon}
         except (TypeError, ValueError):
             pass
-        hour = (ts.astimezone(timezone.utc) - timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+        hour = (ts.astimezone(timezone.utc) - timedelta(minutes=30)).replace(minute=0, second=0, microsecond=0)
         row = rows.setdefault((sid, hour), {"station_id": sid, "hour": hour, "source": "cpcb"})
         row[col] = value
     return list(rows.values()), list(stations.values())
