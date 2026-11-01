@@ -57,6 +57,18 @@ vayuvani/
 └── README.md
 ```
 
+## Kaun? (pollution attribution engine)
+
+Hourly "who caused this spike" estimates for every Delhi station, each with a confidence grade.
+Method, setup and limits: [`docs/KAUN.md`](docs/KAUN.md).
+
+```bash
+python -m attribution.run demo        # offline synthetic run, never published
+python -m attribution.preflight       # checks keys and Supabase scope
+python -m attribution.run hourly      # what .github/workflows/kaun.yml runs
+python -m pytest attribution -q
+```
+
 ## Week 2 Preview
 
 Next: LLM reasoning layer over RAG (CPCB guidelines + WHO standards).
