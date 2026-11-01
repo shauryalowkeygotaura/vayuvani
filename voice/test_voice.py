@@ -61,6 +61,14 @@ def test_air_quality_hindi_no_spike():
     assert "खराब" in out["speech"] and "असामान्य" in out["speech"]
 
 
+def test_low_confidence_not_spoken(monkeypatch):
+    low = [dict(ATTR[0], confidence="low")]
+    monkeypatch.setattr(feeds, "load", lambda name, timeout=1.0: {"now.json": {"stations": STATIONS},
+                                                                   "latest.json": {"attributions": low}}.get(name))
+    out = service.get_air_quality("Anand Vihar", "en", allow_network=False)
+    assert "biomass" not in out["speech"] and "No unusual spike" in out["speech"]
+
+
 def test_air_quality_failures():
     assert not service.get_air_quality("Xyzzyville", "en", allow_network=False)["ok"]
 

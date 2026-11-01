@@ -36,10 +36,13 @@ def load_latest(path: Optional[str] = None) -> list[dict]:
 
 
 def nearest(records: list[dict], lat: float, lon: float, radius_km: float = 6.0,
-            now: Optional[datetime] = None) -> Optional[tuple[dict, float]]:
+            now: Optional[datetime] = None, min_confidence: str = "low") -> Optional[tuple[dict, float]]:
     now = now or datetime.now(timezone.utc)
+    rank = {"low": 0, "medium": 1, "high": 2}
     best = None
     for r in records:
+        if rank.get(r.get("confidence"), -1) < rank[min_confidence]:
+            continue
         if r.get("latitude") is None or r.get("longitude") is None:
             continue
         try:
@@ -61,10 +64,10 @@ def nearest(records: list[dict], lat: float, lon: float, radius_km: float = 6.0,
 
 
 def answer(lat: float, lon: float, language: str = "en", records: Optional[list[dict]] = None,
-           now: Optional[datetime] = None) -> Optional[str]:
+           now: Optional[datetime] = None, min_confidence: str = "low") -> Optional[str]:
     """One spoken sentence, or None when there is no recent nearby spike."""
     recs = records if records is not None else load_latest()
-    hit = nearest(recs, lat, lon, now=now)
+    hit = nearest(recs, lat, lon, now=now, min_confidence=min_confidence)
     if not hit:
         return None
     r, dist = hit

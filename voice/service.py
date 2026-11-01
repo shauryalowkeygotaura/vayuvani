@@ -84,7 +84,8 @@ def get_air_quality(location: str, language: str = "en", allow_network: bool = T
     st, dist = hit
     station = geocode.station_short_name(st["name"])
     latest = (feeds.load("latest.json") or {}).get("attributions", [])
-    kaun = kaun_answer(place["latitude"], place["longitude"], lang, records=latest)
+    # Phone callers hear only medium/high estimates; low ones are on the map with caveats.
+    kaun = kaun_answer(place["latitude"], place["longitude"], lang, records=latest, min_confidence="medium")
     advice = fallback_advisory(st["category"], lang)
     dom = st.get("dominant_pollutant")
     if lang == "hi":
