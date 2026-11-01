@@ -60,6 +60,32 @@ def station_ratio_history(hist) -> dict[str, np.ndarray]:
     return out
 
 
+def second_signal(source: Optional[str], d: dict, wind_speed: Optional[float]) -> Optional[bool]:
+    """
+    Independent corroboration for the two single-signal classes (NEXT.md step 5).
+      industry: SO2 excess is not just riding a CO (combustion) rise:
+                dSO2 [ug/m3] / dCO [mg/m3] >= 20, i.e. a sulphur-rich source
+                (coal/oil) rather than biomass or traffic, which carry little SO2.
+      dust:     resuspension conditions (wind >= 3 m/s) OR no combustion
+                co-signal (dCO <= 0.2 mg/m3 and dNO2 <= 10 ug/m3).
+    Returns None for classes that need no second signal. Thresholds are
+    engineering choices, not literature values: documented in docs/KAUN.md.
+    """
+    if source == "industry":
+        so2, co = d.get("so2"), d.get("co")
+        if so2 is None or not np.isfinite(so2):
+            return False
+        if co is None or not np.isfinite(co) or co <= 0.05:
+            return so2 > 10
+        return so2 / co >= 20
+    if source == "dust":
+        windy = wind_speed is not None and np.isfinite(wind_speed) and wind_speed >= 3.0
+        co, no2 = d.get("co"), d.get("no2")
+        quiet = (co is None or not np.isfinite(co) or co <= 0.2) and (no2 is None or not np.isfinite(no2) or no2 <= 10)
+        return bool(windy or quiet)
+    return None
+
+
 def score(d: dict, totals: dict, ratio_hist: dict, traffic_prior: float = 0.5) -> dict:
     """
     d: mean deltas over the window, keys pm25, pm10, no2, so2, co (CO in mg/m3).

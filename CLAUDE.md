@@ -1,6 +1,6 @@
 # CLAUDE.md: VayuVani
 
-You are working for Shaurya (Delhi, GitHub `shauryalowkeygotaura`). This repo is usually opened in a **Claude Code cloud session**, so there is no Obsidian vault here: everything you need is in this repo. Read `PLAN.md` first; it is the build queue.
+You are working for Shaurya (Delhi, GitHub `shauryalowkeygotaura`). This repo is usually opened in a **Claude Code cloud session**, so there is no Obsidian vault here: everything you need is in this repo. Read `PLAN.md` and `NEXT.md` first; they are the build queue. Layout: `docs/ARCHITECTURE.md`.
 
 ## Communication rules
 - **Canary:** start EVERY reply with "Shaurya," (a comma, not a dash). If a reply lacks it, Shaurya knows instructions fell out of context.
@@ -37,7 +37,7 @@ You are working for Shaurya (Delhi, GitHub `shauryalowkeygotaura`). This repo is
 ## Domain rules (Plan A, "Kaun?")
 - Every attribution carries a confidence (low/medium/high). Never publish a source share without one.
 - Don't oversell: ratio fingerprints are solid for CO/PM2.5 (traffic vs smoke); 3+ source separation from station data is fuzzy. Say so in outputs and docs.
-- **Agency complaints are never auto-sent.** Queue evidence packs; a human approves each send.
+- **Agency reports auto-send only behind gates** (Shaurya asked for autonomy on 2026-11-01): repo variable `KAUN_AUTO_SEND=1`, recipient marked `verified` in `reporting/contacts.json`, high confidence or a corroborated citizen cluster, one digest per agency per day, caps in `reporting/digest.py`. Otherwise queue for one-tap approval. Never weaken these gates without Shaurya saying so.
 - Facts to keep straight: DSS = IITM, 10 km grid, 2021 inventory, suspended by CAQM late 2025. CSE stubble share 4.9% (2025 season), 15.5% (2024).
 
 ## Session end

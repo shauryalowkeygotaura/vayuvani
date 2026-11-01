@@ -149,6 +149,7 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
             n_hours=len(w["hours"]), baseline_kind=str(rows["baseline_kind"].iloc[0]),
             pbl_drop=_pbl_drop(hist, rows),
             excess_ratio=_excess_ratio(rows),
+            second_signal=fingerprints.second_signal(local_top, d, ww.get("speed_ms")),
         )
         meta = stations.get(sid, {})
         name = meta.get("name", sid)

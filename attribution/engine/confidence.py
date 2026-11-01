@@ -14,6 +14,8 @@ Grades: >= 3.5 high, >= 2 medium, else low.
 Caps:
     fewer than 3 species  -> low
     single-hour spike     -> at most medium; low if < 30% above baseline
+    industry/dust top without its second signal (fingerprints.second_signal)
+                          -> at most medium (low if already marginal)
     3+ sources at >= 15%  -> at most medium (3-way separation from station
                              data alone is fuzzy; say so, do not oversell)
 """
@@ -23,7 +25,7 @@ from typing import Optional
 
 def grade(*, species_present: int, shares: dict, nmf_top: Optional[str], top: Optional[str],
           wind: dict, n_hours: int, baseline_kind: str, pbl_drop: Optional[float],
-          excess_ratio: Optional[float] = None) -> tuple[str, list[str]]:
+          excess_ratio: Optional[float] = None, second_signal: Optional[bool] = None) -> tuple[str, list[str]]:
     reasons: list[str] = []
     pts = 0.0
     if species_present >= 4:
@@ -67,6 +69,9 @@ def grade(*, species_present: int, shares: dict, nmf_top: Optional[str], top: Op
     if n_hours < 2 and excess_ratio is not None and excess_ratio < 0.3:
         level = "low"
         reasons.append(f"weak transient: one hour, only {excess_ratio:.0%} above baseline")
+    if second_signal is False and level != "low":
+        level = "low" if level == "medium" and pts < 3 else "medium"
+        reasons.append(f"{top} rests on one signal only; second signal absent")
     if not shares:
         level = "low"
     return level, reasons

@@ -116,3 +116,20 @@ def test_nmf_deterministic():
     a, b = factors.fit(st), factors.fit(st)
     assert a is not None and a["labels"] == b["labels"]
     assert np.allclose(a["H"].to_numpy(), b["H"].to_numpy())
+
+
+def test_second_signal_rules():
+    ss = fingerprints.second_signal
+    assert ss("traffic", {}, None) is None
+    assert ss("industry", {"so2": 80, "co": 0.3}, None) is True       # sulphur-rich
+    assert ss("industry", {"so2": 8, "co": 1.0}, None) is False       # SO2 just riding combustion
+    assert ss("dust", {"co": 1.0, "no2": 40}, 4.0) is True             # windy resuspension
+    assert ss("dust", {"co": 1.0, "no2": 40}, 1.0) is False            # combustion co-signal, calm
+    assert ss("dust", {"co": 0.1, "no2": 3}, 1.0) is True
+
+
+def test_confidence_drops_without_second_signal():
+    base = dict(species_present=5, nmf_top="industry", top="industry",
+                wind={"sector": "E", "steadiness": 0.9}, n_hours=3, baseline_kind="same-hour-7d", pbl_drop=None)
+    assert confidence.grade(shares={"industry": 0.8, "dust": 0.2}, **base, second_signal=True)[0] == "high"
+    assert confidence.grade(shares={"industry": 0.8, "dust": 0.2}, **base, second_signal=False)[0] == "medium"

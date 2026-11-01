@@ -33,7 +33,7 @@
 <body>
 <header>
   <h1>Kaun? <span style="font-weight:400">/ कौन?</span></h1>
-  <p class="sub">Hourly, observation-driven source estimates for pollution spikes at Delhi monitoring stations.</p>
+  <p class="sub">Hourly, observation-driven source estimates for pollution spikes at Delhi monitoring stations. Dot fill = current NAQI; ring = source of a recent spike.</p>
   <p class="sub" id="generated"></p>
 </header>
 <main>
@@ -69,18 +69,31 @@ function bar(shares) {
     `<span><i class="dot" style="background:${COLORS[k]||"#ccc"}"></i>${esc(LABELS[k]||k)} ${Math.round(v*100)}%</span>`).join("") + "</div>";
 }
 
-fetch("data/latest.json", { cache: "no-store" })
-  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-  .then(feed => {
-    document.getElementById("generated").textContent = "Updated " + ist(feed.generated_at) + " IST";
+const AQI_COLORS = [[50,"#2e7d32"],[100,"#7cb342"],[200,"#fbc02d"],[300,"#f57c00"],[400,"#d32f2f"],[1e9,"#7b1fa2"]];
+const aqiColor = v => v == null ? "#c7c7cc" : AQI_COLORS.find(([hi]) => v <= hi)[1];
+const getJSON = u => fetch(u, { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(u + " " + r.status); return r.json(); });
+
+Promise.all([getJSON("data/latest.json"), getJSON("data/now.json").catch(() => ({ stations: [] }))])
+  .then(([feed, now]) => {
+    document.getElementById("generated").textContent = "Updated " + ist(feed.generated_at) + " IST" +
+      (now.city && now.city.median_aqi ? ` · city median AQI ${now.city.median_aqi} (${now.city.stations_reporting} stations)` : "");
     document.getElementById("disclaimer").textContent = feed.disclaimer || "";
     const byStation = {};
     (feed.attributions || []).forEach(a => byStation[a.station_id] = a);
-    (feed.stations || []).forEach(s => {
-      const a = byStation[s.id];
-      const color = a ? (COLORS[a.top_source] || "#555") : "#c7c7cc";
-      L.circleMarker([s.latitude, s.longitude], { radius: a ? 9 : 5, color, fillColor: color, fillOpacity: a ? .85 : .5, weight: 1 })
-        .addTo(map).bindPopup(a ? `<b>${esc(s.name)}</b><br>${esc(a.summary_en)}<br>${esc(a.summary_hi)}` : `<b>${esc(s.name)}</b><br>No spike in the last 48 h`);
+    const aqiBy = {};
+    (now.stations || []).forEach(s => aqiBy[s.id] = s);
+    const all = {};
+    (feed.stations || []).forEach(s => all[s.id] = s);
+    (now.stations || []).forEach(s => all[s.id] = all[s.id] || s);
+    Object.values(all).forEach(s => {
+      const a = byStation[s.id], q = aqiBy[s.id];
+      const aqi = q && !q.stale ? q.aqi : null;
+      const color = aqiColor(aqi);
+      const aqiLine = aqi != null ? `AQI <b>${esc(aqi)}</b> (${esc(q.category)}), main pollutant ${esc(q.dominant_pollutant)}` : "AQI unavailable";
+      L.circleMarker([s.latitude, s.longitude], { radius: a ? 10 : 7, color: a ? (COLORS[a.top_source] || "#222") : "#fff",
+                      weight: a ? 3 : 1, fillColor: color, fillOpacity: .9 })
+        .addTo(map).bindPopup(`<b>${esc(s.name)}</b><br>${aqiLine}` +
+          (a ? `<br>${esc(a.summary_en)}<br>${esc(a.summary_hi)}` : "<br>No spike in the last 48 h"));
     });
     const list = document.getElementById("list");
     const items = feed.attributions || [];
