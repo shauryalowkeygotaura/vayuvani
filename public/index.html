@@ -51,10 +51,10 @@
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
 const COLORS = { traffic:"#3a6fd8", biomass_burning:"#c0392b", industry:"#7d3c98", dust:"#b9770e",
-                 regional_background:"#8e8e93", transported_smoke:"#5d4037" };
+                 regional_background:"#8e8e93", transported_smoke:"#5d4037", secondary:"#00897b" };
 const LABELS = { traffic:"Traffic", biomass_burning:"Biomass/garbage burning", industry:"Industry (SO2)",
                  dust:"Construction/road dust", regional_background:"Regional background",
-                 transported_smoke:"Transported smoke" };
+                 transported_smoke:"Transported smoke", secondary:"Secondary (humid, stagnant air)" };
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const ist = iso => new Date(iso).toLocaleString("en-IN", { timeZone:"Asia/Kolkata", day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" });
 

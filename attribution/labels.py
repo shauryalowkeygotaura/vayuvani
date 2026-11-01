@@ -11,6 +11,7 @@ LABELS_EN = {
     "dust": "construction/road dust",
     "regional_background": "regional background",
     "transported_smoke": "smoke transported from upwind fires",
+    "secondary": "secondary particles formed in humid, stagnant air",
 }
 LABELS_HI = {
     "traffic": "गाड़ियों का धुआं",
@@ -19,6 +20,7 @@ LABELS_HI = {
     "dust": "निर्माण/सड़क की धूल",
     "regional_background": "पूरे इलाके का प्रदूषण",
     "transported_smoke": "दूर की आग का धुआं",
+    "secondary": "नम, ठहरी हवा में बने बारीक कण",
 }
 CONF_HI = {"low": "कम", "medium": "मध्यम", "high": "अधिक"}
 

@@ -45,7 +45,7 @@ locally, GitHub Actions secrets in CI).
 
 ## Database
 
-Run `supabase/migrations/001_base.sql`, `002_kaun.sql` and `003_voice_reporting.sql` in order in the
+Run `supabase/migrations/001_base.sql`, `002_kaun.sql`, `003_voice_reporting.sql` and `004_fusion_vars.sql` in order in the
 Supabase SQL editor.
 
 ## Automation

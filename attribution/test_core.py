@@ -103,6 +103,7 @@ def test_hourly_end_to_end_offline(tmp_path, monkeypatch):
         return {"obs": len(obs)}
 
     monkeypatch.setattr(run, "ingest", fake_ingest)
+    monkeypatch.setattr("attribution.ingest.landuse.refresh", lambda store, stations, **k: 0)  # no network in tests
     args = type("A", (), {"skip_preflight": True})()
     assert run.hourly(args) == 0
 

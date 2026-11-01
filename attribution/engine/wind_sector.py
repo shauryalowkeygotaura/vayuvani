@@ -58,19 +58,21 @@ def window_wind(rows: pd.DataFrame) -> dict:
     }
 
 
-def cbpf(hist: pd.DataFrame, pct: float = 75.0) -> dict:
-    """{sector: probability} of exceeding the station's pct-th PM2.5 percentile."""
-    h = hist.dropna(subset=["pm25", "wind_dir", "wind_speed"])
+def cbpf(hist: pd.DataFrame, pct: float = 75.0, col: str = "pm25") -> dict:
+    """{sector: probability} that `col` exceeds its pct-th percentile, given wind from that sector."""
+    if col not in hist or "wind_dir" not in hist:
+        return {}
+    h = hist.dropna(subset=[col, "wind_dir", "wind_speed"])
     if len(h) < 48:
         return {}
-    thr = np.percentile(h["pm25"], pct)
+    thr = np.percentile(h[col], pct)
     sec = h["wind_dir"].map(sector_of)
     calm = h["wind_speed"] < CALM_MS
     out = {}
     for s in SECTORS:
         m = (sec == s) & ~calm
         if m.sum() >= 6:
-            out[s] = round(float((h.loc[m, "pm25"] > thr).mean()), 3)
+            out[s] = round(float((h.loc[m, col] > thr).mean()), 3)
     return out
 
 

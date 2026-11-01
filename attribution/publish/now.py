@@ -26,7 +26,7 @@ from ..config import PUBLIC_DIR
 
 WINDOWS = {"pm25": 24, "pm10": 24, "no2": 24, "so2": 24, "co": 8, "o3": 8}
 MIN_HOURS = {24: 16, 8: 6}
-STALE_HOURS = 3
+STALE_HOURS = 4  # OpenAQ hourly data lands 2-3.5 h late (measured 2026-11-01)
 
 
 def station_naqi(rows: pd.DataFrame, now: datetime) -> dict:

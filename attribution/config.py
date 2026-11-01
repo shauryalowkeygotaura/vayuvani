@@ -24,6 +24,11 @@ FIRMS_DAY_RANGE = 2
 # Pollutant columns tracked hourly. Units: ug/m3, except CO in mg/m3
 # (same convention as pipeline/aqi_calc.py and the aqi_readings table).
 POLLUTANTS = ("pm25", "pm10", "no2", "so2", "co", "o3")
+# Extra station variables used as source evidence (not in the NAQI):
+#   no, nox: ug/m3 (NOx as NO2-equivalent); fresh exhaust is NO-rich.
+#   rh: %, temp: deg C; humid, cool air grows secondary fine particles.
+EXTRA_VARS = ("no", "nox", "rh", "temp")
+DELTA_VARS = POLLUTANTS + ("no", "nox")
 
 # Ingest window: a normal hourly run fetches since the checkpoint, capped so a
 # long outage cannot turn one run into thousands of calls.

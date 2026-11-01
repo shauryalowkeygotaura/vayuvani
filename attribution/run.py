@@ -131,7 +131,9 @@ def attribute(store, now: datetime, since: datetime) -> list[dict]:
             from .config import DELHI_LAT, DELHI_LON
             from .ingest.firms import bearing_deg
             f["bearing_from_delhi"] = bearing_deg(DELHI_LAT, DELHI_LON, float(f["latitude"]), float(f["longitude"]))
-    recs = engine.run(obs, wind, fires, load_stations(store), since=pd.Timestamp(since))
+    from .ingest import landuse
+    recs = engine.run(obs, wind, fires, load_stations(store), since=pd.Timestamp(since),
+                      landuse=landuse.load(store))
     store.upsert("attributions", recs)
     return recs
 
@@ -170,6 +172,11 @@ def hourly(args) -> int:
     try:
         meta["ingest"] = ingest(store, ckpt, since, until)
         ckpt.set("ingest", until)
+        try:  # static OSM inventory; a few stations per run, never blocks attribution
+            from .ingest import landuse
+            meta["landuse_refreshed"] = landuse.refresh(store, list(load_stations(store).values()))
+        except Exception as e:
+            logger.warning(f"Land-use refresh skipped: {e}")
 
         a_last = ckpt.get("attribute") or since
         recs = attribute(store, now, a_last - timedelta(hours=6))

@@ -21,7 +21,7 @@ PRIMARY_AGENCY = {
     "traffic": "Delhi Traffic Police",
     "dust": "DPCC",
 }
-NOT_ROUTABLE = ("regional_background", "transported_smoke")
+NOT_ROUTABLE = ("regional_background", "transported_smoke", "secondary")
 FALLBACK = "CPCB"
 HERE = os.path.dirname(__file__)
 

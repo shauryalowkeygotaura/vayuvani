@@ -10,12 +10,12 @@ import re
 from typing import Optional
 
 MOLAR_VOLUME = 24.45
-MW = {"no2": 46.01, "so2": 64.07, "o3": 48.00, "co": 28.01}
+MW = {"no2": 46.01, "so2": 64.07, "o3": 48.00, "co": 28.01, "no": 30.01, "nox": 46.01}
 
 _UNIT_ALIASES = {
     "µg/m³": "ugm3", "μg/m³": "ugm3", "ug/m3": "ugm3", "µg/m3": "ugm3", "μg/m3": "ugm3",
     "mg/m³": "mgm3", "mg/m3": "mgm3",
-    "ppm": "ppm", "ppb": "ppb",
+    "ppm": "ppm", "ppb": "ppb", "c": "c", "°c": "c", "%": "pct",
 }
 
 
@@ -37,7 +37,11 @@ def to_standard(param: str, value: Optional[float], unit: Optional[str]) -> Opti
         v = float(value)
     except (TypeError, ValueError):
         return None
-    if v != v or v < 0:
+    if v != v:
+        return None
+    if param == "temp":
+        return v if -10 <= v <= 55 and normalise_unit(unit) in (None, "c") else None
+    if v < 0:
         return None
     u = normalise_unit(unit)
     if param in ("pm25", "pm10"):
@@ -52,7 +56,9 @@ def to_standard(param: str, value: Optional[float], unit: Optional[str]) -> Opti
         if u == "ppb":
             return v * MW["co"] / MOLAR_VOLUME / 1000.0
         return None
-    if param in ("no2", "so2", "o3"):
+    if param == "rh":
+        return v if v <= 100 else None
+    if param in ("no2", "so2", "o3", "no", "nox"):
         if u == "ugm3":
             return v
         if u == "ppm":

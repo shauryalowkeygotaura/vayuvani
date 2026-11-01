@@ -26,9 +26,33 @@ preflight -> ingest -> attribute -> queue -> publish -> GitHub Pages
 | Queue | `attribution/routing/` | high-confidence local spikes only, human approval required |
 | Backtest | `attribution/validation/backtest.py` | CSE seasonal, known events, DSS (when supplied) |
 
+## Source model: multi-variable evidence fusion (`attribution/engine/fusion.py`)
+
+Each spike window is scored by 8 independent evidence terms. Each term adds a log-likelihood per source, and the
+posterior is a softmax over the sums. Sources: traffic, biomass/garbage burning, industry, dust, and secondary
+aerosol (fine particles formed in humid, stagnant air; never routed to an agency). The regional/transported
+share is split off first (`regional.py`), and the posterior divides the local remainder.
+
+| Term | Variables | Points to |
+|---|---|---|
+| fingerprint | dNO2/dPM2.5, dCO/dPM2.5, dSO2/dPM2.5, fine fraction; percentiles vs the station's own history | all four primary classes |
+| secondary_rh | relative humidity x fine fraction x weak CO/NO2 markers | secondary (and against burning) |
+| fresh_no | dNO / dNOx (NO as NO2-equivalent) | traffic (fresh exhaust close by) |
+| time_temp | diurnal traffic prior; cold nights (< 18 C, 20:00-06:00 IST) | traffic, burning |
+| upwind_landuse | OSM industrial, power plants, kilns, landfills, construction, quarries, rail yards and major roads per wind sector (0-2/2-5/5-10 km, weights 1/0.5/0.25) vs the station's all-sector mean | the matching class |
+| pollutant_wind | CBPF of each class's marker pollutant (NO2/NO, SO2, PM10, CO) in the window's sector, as a z-score across sectors | the matching class |
+| factors | NMF factor shares in the window | the factor's label |
+| local_fires | FIRMS points within 30 km upwind in the last 12 h | burning |
+
+Wind comes from the station's own mast where OpenAQ has it (most CPCB/DPCC stations), otherwise from Open-Meteo.
+The weights (`fusion.W`) are engineering priors, not fitted values: there is no labelled ground truth for Delhi.
+Every attribution stores each term's contribution (`evidence.fusion.terms`), so you can audit why it chose a
+source. More terms do not mean more truth. Every term has a physical reason to exist, and the backtest is the
+check.
+
 ## Setup (one time)
 
-1. Supabase SQL editor: run `supabase/migrations/002_kaun.sql`.
+1. Supabase SQL editor: run `supabase/migrations/002_kaun.sql`, `003_voice_reporting.sql`, `004_fusion_vars.sql`.
 2. GitHub repo secrets: `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` (service_role, not anon), `OPENAQ_API_KEY`,
    `FIRMS_MAP_KEY`; optional `DATA_GOV_IN_API_KEY`, `KAUN_AGENCY_CONTACTS`.
 3. Settings -> Pages -> Source: **GitHub Actions**.

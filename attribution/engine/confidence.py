@@ -8,6 +8,7 @@ Points:
     +1   NMF factor analysis agrees on the top source
     +0.5 steady, non-calm wind (sector claim is meaningful)
     +0.5 spike lasts >= 2 hours
+    +0.5 >= 3 independent fusion terms favour the top source (fusion.py)
     -1   baseline is the trailing-24h fallback (too little history)
     -1   boundary layer collapsed (> 50% drop): the spike may be meteorology
 Grades: >= 3.5 high, >= 2 medium, else low.
@@ -25,7 +26,8 @@ from typing import Optional
 
 def grade(*, species_present: int, shares: dict, nmf_top: Optional[str], top: Optional[str],
           wind: dict, n_hours: int, baseline_kind: str, pbl_drop: Optional[float],
-          excess_ratio: Optional[float] = None, second_signal: Optional[bool] = None) -> tuple[str, list[str]]:
+          excess_ratio: Optional[float] = None, second_signal: Optional[bool] = None,
+          agreeing_terms: Optional[int] = None) -> tuple[str, list[str]]:
     reasons: list[str] = []
     pts = 0.0
     if species_present >= 4:
@@ -50,6 +52,11 @@ def grade(*, species_present: int, shares: dict, nmf_top: Optional[str], top: Op
         reasons.append("calm wind: source is nearby but direction unknown")
     if n_hours >= 2:
         pts += 0.5
+    if agreeing_terms is not None:
+        if agreeing_terms >= 3:
+            pts += 0.5
+        elif agreeing_terms <= 1:
+            reasons.append("few independent signals agree on the top source")
     if baseline_kind != "same-hour-7d":
         pts -= 1
         reasons.append("baseline from <4 days of history")

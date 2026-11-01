@@ -41,6 +41,7 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "complaint_queue": ("attribution_id",),
     "citizen_reports": ("id",),
     "report_digests": ("agency", "day"),
+    "station_landuse": ("station_id",),
 }
 
 PAGE = 1000

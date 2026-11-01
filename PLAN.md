@@ -76,6 +76,12 @@ Unticked = needs live data, a human, or time (backtest numbers, DSS outputs, 7-d
 
 ---
 
+## Plan A+ (2026-11-01): anyone can call, it reports itself
+- [x] Phone line: VAPI assistant + Vercel webhook (`voice/`, `api/`): AQI, main pollutant, Kaun source line, advice, Hindi/English. Setup in `docs/VOICE.md`.
+- [x] Caller complaints: `report_pollution` tool -> `citizen_reports` -> clustered hourly (`reporting/citizen.py`).
+- [x] Autonomous agency digests (`reporting/digest.py`, `kaun-report.yml`), gated by `KAUN_AUTO_SEND`, verified recipients, caps, kill switch.
+- [ ] Live: Vercel deploy, VAPI assistant, phone number, SMTP secrets, verified agency emails (all need Shaurya's accounts).
+
 ## Plan B (hardware, later): "Dhuan Node" (smoke node)
 A street sensor that says **what** is burning. The ground truth Plan A lacks.
 - **Build:** ESP32 + Plantower PMS (PM1/2.5/10) + electrochemical CO + NO2 + VOC sensor + wind vane. Optional mic for traffic noise. ~Rs 6-10k per node.

@@ -68,6 +68,9 @@ def test_openaq_hours_parse_edge_cases():
     assert rows == [(datetime(2026, 11, 1, 5, tzinfo=timezone.utc), pytest.approx(1.2))]
     assert openaq.parse_hours({"results": [{"value": 400, "period": {"datetimeFrom": {"utc": "2026-11-01T04:30:00Z"}}}]},
                               "wind_direction", "deg") == []
+    partial = {"results": [{"value": 90, "coverage": {"percentComplete": 25.0},
+                            "period": {"datetimeFrom": {"utc": "2026-11-01T04:30:00Z"}}}]}
+    assert openaq.parse_hours(partial, "pm25", "µg/m³") == []
     with pytest.raises(http.BadResponse):
         openaq.parse_hours({"oops": 1}, "co", None)
 

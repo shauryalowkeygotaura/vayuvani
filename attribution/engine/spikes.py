@@ -18,7 +18,7 @@ import warnings
 import numpy as np
 import pandas as pd
 
-from ..config import (BASELINE_DAYS, MAD_FLOOR, MIN_BASELINE_SAMPLES, POLLUTANTS,
+from ..config import (BASELINE_DAYS, DELTA_VARS, MAD_FLOOR, MIN_BASELINE_SAMPLES, POLLUTANTS,
                       SPIKE_K, SPIKE_MIN_ABS)
 
 
@@ -52,7 +52,7 @@ def detect(obs: pd.DataFrame) -> pd.DataFrame:
         g = g.reindex(full)
         g["station_id"] = sid
         kind = pd.Series("same-hour-7d", index=g.index)
-        for p in POLLUTANTS:
+        for p in DELTA_VARS:
             if p not in g.columns:
                 g[p] = np.nan
             s = g[p].astype(float)

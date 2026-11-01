@@ -17,7 +17,7 @@ from typing import Optional
 from pipeline.fetcher import OPENAQ_BASE
 
 from .. import http
-from ..config import POLLUTANTS
+from ..config import EXTRA_VARS, POLLUTANTS
 from .units import station_slug, to_standard
 
 logger = logging.getLogger(__name__)
@@ -46,6 +46,8 @@ def _parse_dt(raw) -> Optional[datetime]:
 
 
 WIND_PARAMS = ("wind_speed", "wind_direction")
+# OpenAQ parameter name -> our column, for the extra evidence variables.
+EXTRA_PARAMS = {"no": "no", "nox": "nox", "relativehumidity": "rh", "temperature": "temp"}
 
 
 def parse_locations(payloads: list[dict], now: Optional[datetime] = None) -> list[dict]:
@@ -84,7 +86,8 @@ def parse_locations(payloads: list[dict], now: Optional[datetime] = None) -> lis
             for s in loc.get("sensors") or []:
                 p = (s.get("parameter") or {})
                 pname = (p.get("name") or "").lower()
-                if s.get("id") and (pname in POLLUTANTS or pname in WIND_PARAMS):
+                pname = EXTRA_PARAMS.get(pname, pname)
+                if s.get("id") and (pname in POLLUTANTS or pname in WIND_PARAMS or pname in EXTRA_VARS):
                     by_param.setdefault(pname, []).append({"id": int(s["id"]), "units": p.get("units")})
             if not any(p in by_param for p in POLLUTANTS):
                 continue
@@ -139,6 +142,11 @@ def parse_hours(payload: dict, param: str, units: Optional[str]) -> list[tuple[d
         period = r.get("period") or {}
         start = _parse_dt(period.get("datetimeFrom"))
         if start is None:
+            continue
+        # Partial hours (e.g. 1 of 4 quarter-hour samples) are noisy and bias the
+        # newest hour; keep only >= 75% complete when OpenAQ reports coverage.
+        pc = (r.get("coverage") or {}).get("percentComplete")
+        if isinstance(pc, (int, float)) and pc < 75:
             continue
         u = ((r.get("parameter") or {}).get("units")) or units
         if param in WIND_PARAMS:

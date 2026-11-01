@@ -15,10 +15,10 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from ..config import NMF_WINDOW_DAYS, POLLUTANTS
+from ..config import DELTA_VARS, EXTRA_VARS, NMF_WINDOW_DAYS, POLLUTANTS
 from ..ingest import traffic
 from ..labels import CONF_HI, LABELS_EN, LABELS_HI
-from . import confidence, factors, fingerprints, regional, spikes, wind_sector
+from . import confidence, factors, fingerprints, fusion, regional, spikes, wind_sector
 
 logger = logging.getLogger(__name__)
 
@@ -87,13 +87,15 @@ def attribution_id(station_id: str, start) -> str:
 
 
 def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict[str, dict],
-        since: Optional[pd.Timestamp] = None) -> list[dict]:
+        since: Optional[pd.Timestamp] = None, landuse: Optional[dict] = None) -> list[dict]:
     """
     obs: hourly_obs rows (>= 7 days history recommended).
     stations: {station_id: {"name", "latitude", "longitude"}}.
     since: only attribute windows that END at or after this hour (the rest were
     attributed by earlier runs); None = all.
+    landuse: {station_id: sector grid} from ingest/landuse.py (optional).
     """
+    landuse = landuse or {}
     if obs.empty:
         return []
     data = merge_obs(obs, wind)
@@ -115,16 +117,35 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
         hist = st_rows.loc[(st_rows["hour"] < w["start"]) &
                            (st_rows["hour"] >= w["start"] - pd.Timedelta(days=NMF_WINDOW_DAYS))]
 
-        d = {p: _mean(rows, f"delta_{p}") for p in POLLUTANTS}
-        totals = {p: _mean(rows, p) for p in POLLUTANTS}
+        d = {p: _mean(rows, f"delta_{p}") for p in DELTA_VARS}
+        totals = {p: _mean(rows, p) for p in POLLUTANTS + EXTRA_VARS}
         species = sum(1 for p in ("pm25", "pm10", "no2", "co", "so2") if totals.get(p) is not None)
 
         tprior = float(np.mean([traffic.prior(h.to_pydatetime()) for h in rows["hour"]]))
         fp = fingerprints.score(d, totals, fingerprints.station_ratio_history(hist), tprior)
-        local = fp["shares"]
 
         ww = wind_sector.window_wind(rows)
-        cb = wind_sector.cbpf(hist)
+        cb_all = {p: wind_sector.cbpf(hist, col=p) for p in ("pm25", "pm10", "no2", "so2", "co", "no")}
+        cb = cb_all["pm25"]
+
+        if sid not in models:
+            models[sid] = factors.fit(st_rows.loc[st_rows["hour"] >= w["start"] - pd.Timedelta(days=NMF_WINDOW_DAYS)])
+        nmf = factors.window_contrib(models[sid], w["hours"])
+        nmf_top = next((k for k in nmf if k not in ("mixed", "secondary")), None)
+
+        meta = stations.get(sid, {})
+        n_fires = fusion.local_fire_count(fires, meta.get("latitude"), meta.get("longitude"), ww, w["end"])
+        fused = fusion.fuse({
+            "fingerprint": fusion.term_fingerprint(fp["scores"]),
+            "secondary_rh": fusion.term_secondary(fp["ratios"], totals.get("rh")),
+            "fresh_no": fusion.term_fresh_no(d),
+            "time_temp": fusion.term_time_temp(list(rows["hour"]), tprior, totals.get("temp")),
+            "upwind_landuse": fusion.term_landuse(landuse.get(sid), ww),
+            "pollutant_wind": fusion.term_cbpf(cb_all, ww),
+            "factors": fusion.term_nmf(nmf),
+            "local_fires": fusion.term_local_fires(n_fires),
+        })
+        local = fused["shares"]
 
         reg = regional.regional_share(d.get("pm25"), w["hours"], bg)
         fires_up = regional.upwind_fires(fires, wind_all, w["end"])
@@ -137,12 +158,7 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
         tot = sum(shares.values())
         if tot > 0:
             shares = {k: round(v / tot, 3) for k, v in shares.items()}
-
-        if sid not in models:
-            models[sid] = factors.fit(st_rows.loc[st_rows["hour"] >= w["start"] - pd.Timedelta(days=NMF_WINDOW_DAYS)])
-        nmf = factors.window_contrib(models[sid], w["hours"])
-        nmf_top = next((k for k in nmf if k not in ("mixed", "secondary")), None)
-        local_top = max(local, key=local.get) if local else None
+        local_top = fused["top"]
 
         level, reasons = confidence.grade(
             species_present=species, shares=shares, nmf_top=nmf_top, top=local_top, wind=ww,
@@ -150,8 +166,8 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
             pbl_drop=_pbl_drop(hist, rows),
             excess_ratio=_excess_ratio(rows),
             second_signal=fingerprints.second_signal(local_top, d, ww.get("speed_ms")),
+            agreeing_terms=fused["agreeing_terms"],
         )
-        meta = stations.get(sid, {})
         name = meta.get("name", sid)
         en, hi = _summary(name, w["start"], w["end"], shares, ww["sector"], level, bool(ww.get("calm")))
         top = max(shares, key=shares.get) if shares else None
@@ -178,6 +194,10 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
                 "ratios": fp["ratios"],
                 "fingerprint_scores": fp["scores"],
                 "local_shares": {k: round(v, 3) for k, v in local.items()},
+                "fusion": {k: fused[k] for k in ("posterior", "agreeing_terms", "entropy", "terms")},
+                "cbpf_by_pollutant": {k: v for k, v in cb_all.items() if v},
+                "extra": {k: (None if totals.get(k) is None else round(totals[k], 2)) for k in EXTRA_VARS},
+                "local_fires_30km": n_fires,
                 "wind": ww,
                 "cbpf": cb,
                 "cbpf_top_sector": wind_sector.top_sector(cb),
