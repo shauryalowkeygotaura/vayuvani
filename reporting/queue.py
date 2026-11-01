@@ -1,35 +1,35 @@
 """
-Complaint queue. Human-approved, NEVER auto-sent (CLAUDE.md domain rule).
+Report queue: everything that may go to an agency passes through here.
 
-Flow:
-1. enqueue(): after each engine run, every HIGH-confidence attribution whose
-   top source is local and routable gets an evidence pack and a row in
-   complaint_queue with status "pending".
-2. A human reviews the pack and approves with ONE tap: the "Kaun approve"
-   GitHub Actions workflow (workflow_dispatch, input = complaint id), runnable
-   from the GitHub mobile app. That is the approve link stored on each row.
-   Locally: python -m reporting.queue approve <id>
-3. send_approved(): only rows with status "approved" AND approved_by set are
-   rendered into an outbox file. Delivery itself (email/WhatsApp/portal) is
-   left as a manual step until agency channels are verified; there is no code
-   path from "pending" to "sent".
+Producers (hourly cron, independent of any phone call):
+- enqueue(): HIGH-confidence attributions whose top source is local and
+  routable (kind = "spike").
+- reporting.citizen.enqueue_clusters(): clusters of caller reports, kind = "citizen".
+
+Consumer: reporting.digest (daily). In manual mode it sends only rows a
+human approved (one tap: the "Kaun approve report" workflow, or
+`python -m reporting.queue approve <id> --by <name>`). In auto mode
+(KAUN_AUTO_SEND=1) it sends pending rows too, inside the caps in digest.py.
+
+Statuses: pending -> approved (manual) -> sent | held (no verified recipient) | rejected.
 """
 
 import argparse
-import json
 import logging
-import os
 import re
 from datetime import datetime, timezone
 
-from attribution.config import REPO_SLUG, STATE_DIR
+from attribution.config import REPO_SLUG
 from attribution.store import get_store
+
 from . import evidence
-from .agencies import NOT_ROUTABLE, agencies_for, contacts
+from .agencies import NOT_ROUTABLE, agencies_for
 
 logger = logging.getLogger(__name__)
 
 APPROVE_URL = f"https://github.com/{REPO_SLUG}/actions/workflows/kaun-approve.yml"
+ID_RE = re.compile(r"^[0-9a-f]{16}$")
+APPROVER_RE = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,60}$")
 
 
 def eligible(rec: dict) -> bool:
@@ -38,18 +38,28 @@ def eligible(rec: dict) -> bool:
             and bool(agencies_for(top)) and not rec.get("synthetic"))
 
 
+def existing_ids(store) -> set[str]:
+    return {str(r.get("attribution_id")) for r in store.select("complaint_queue")}
+
+
 def enqueue(records: list[dict], store=None, root=None) -> list[dict]:
     store = store or get_store()
-    existing = {str(r.get("attribution_id")) for r in store.select("complaint_queue")}
+    seen = existing_ids(store)
     rows = []
     for rec in records:
-        if not eligible(rec) or rec["id"] in existing:
+        if not eligible(rec) or rec["id"] in seen:
             continue
         pack = evidence.build(rec, root=root)
         rows.append({
             "attribution_id": rec["id"],
+            "kind": "spike",
             "station_id": rec["station_id"],
             "agencies": list(agencies_for(rec["top_source"])),
+            "top_source": rec["top_source"],
+            "confidence": rec["confidence"],
+            "latitude": rec.get("latitude"),
+            "longitude": rec.get("longitude"),
+            "window_start": rec.get("window_start"),
             "summary": rec["summary_en"],
             "evidence_md": pack["markdown"],
             "status": "pending",
@@ -58,76 +68,57 @@ def enqueue(records: list[dict], store=None, root=None) -> list[dict]:
         })
     if rows:
         store.upsert("complaint_queue", rows)
-    logger.info(f"Queue: {len(rows)} new complaints pending human approval")
+    logger.info(f"Queue: {len(rows)} new spike reports")
     return rows
 
 
-ID_RE = re.compile(r"^[0-9a-f]{16}$")
-APPROVER_RE = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,60}$")
+def _check_id(item_id: str) -> None:
+    if not ID_RE.fullmatch(item_id or ""):  # whitelist: goes into a PostgREST filter
+        raise ValueError(f"bad report id {item_id!r}: expected 16 hex chars")
 
 
-def approve(attribution_id: str, approver: str, store=None) -> None:
-    # Whitelist: both values end up in a PostgREST query string.
-    if not ID_RE.fullmatch(attribution_id or ""):
-        raise ValueError(f"bad complaint id {attribution_id!r}: expected 16 hex chars")
+def _set_status(item_id: str, approver: str, status: str, store=None) -> None:
+    _check_id(item_id)
     if not APPROVER_RE.fullmatch(approver or ""):
         raise ValueError("approver must be a plain name (letters, spaces, . ' -)")
-    if not approver.strip():
-        raise ValueError("approver name is required")
     store = store or get_store()
-    rows = store.select("complaint_queue", {"attribution_id": f"eq.{attribution_id}"})
+    rows = store.select("complaint_queue", {"attribution_id": f"eq.{item_id}"})
     if not rows:
-        raise SystemExit(f"no complaint {attribution_id}")
-    if rows[0].get("status") != "pending":
-        raise SystemExit(f"complaint {attribution_id} is {rows[0].get('status')}, not pending")
-    store.update("complaint_queue", {"attribution_id": attribution_id}, {
-        "status": "approved", "approved_by": approver.strip(),
+        raise SystemExit(f"no report {item_id}")
+    if rows[0].get("status") not in ("pending", "held"):
+        raise SystemExit(f"report {item_id} is {rows[0].get('status')}; only pending/held can change")
+    store.update("complaint_queue", {"attribution_id": item_id}, {
+        "status": status, "approved_by": approver.strip(),
         "approved_at": datetime.now(timezone.utc).isoformat(),
     })
-    logger.info(f"Complaint {attribution_id} approved by {approver}")
+    logger.info(f"Report {item_id} -> {status} by {approver}")
 
 
-def send_approved(store=None, outbox: str = None) -> list[str]:
-    """Render approved complaints into outbox files for the human to send."""
-    store = store or get_store()
-    outbox = outbox or os.path.join(STATE_DIR, "outbox")
-    os.makedirs(outbox, exist_ok=True)
-    book = contacts()
-    written = []
-    for row in store.select("complaint_queue", {"status": "eq.approved"}):
-        if not row.get("approved_by"):
-            continue  # belt and braces: never act on an unattributed approval
-        agencies = row.get("agencies")
-        if isinstance(agencies, str):
-            agencies = json.loads(agencies)
-        to = [book.get(a, f"<verify contact for {a}>") for a in agencies or []]
-        path = os.path.join(outbox, f"{row['attribution_id']}.md")
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(f"To: {', '.join(to)}\nApproved by: {row['approved_by']}\n\n{row['evidence_md']}\n")
-        store.update("complaint_queue", {"attribution_id": row["attribution_id"]},
-                     {"status": "ready_to_send"})
-        written.append(path)
-    return written
+def approve(item_id: str, approver: str, store=None) -> None:
+    _set_status(item_id, approver, "approved", store)
+
+
+def reject(item_id: str, approver: str, store=None) -> None:
+    _set_status(item_id, approver, "rejected", store)
 
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    ap = argparse.ArgumentParser(description="Kaun complaint queue")
+    ap = argparse.ArgumentParser(description="VayuVani report queue")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    a = sub.add_parser("approve")
-    a.add_argument("attribution_id")
-    a.add_argument("--by", required=True, help="name of the human approving")
-    sub.add_parser("outbox")
+    for name in ("approve", "reject"):
+        a = sub.add_parser(name)
+        a.add_argument("item_id")
+        a.add_argument("--by", required=True, help="name of the human deciding")
     sub.add_parser("list")
     args = ap.parse_args()
     if args.cmd == "approve":
-        approve(args.attribution_id, args.by)
-        print("\n".join(send_approved()))
-    elif args.cmd == "outbox":
-        print("\n".join(send_approved()))
+        approve(args.item_id, args.by)
+    elif args.cmd == "reject":
+        reject(args.item_id, args.by)
     else:
         for r in get_store().select("complaint_queue", {"status": "eq.pending"}):
-            print(r["attribution_id"], r.get("summary"))
+            print(r["attribution_id"], r.get("kind"), r.get("summary"))
 
 
 if __name__ == "__main__":

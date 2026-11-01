@@ -150,7 +150,7 @@ def publish(store, now: datetime, run_meta: dict, root: str = None) -> list[str]
 
 def hourly(args) -> int:
     from .preflight import check
-    from reporting import queue
+    from reporting import citizen, queue
 
     now = datetime.now(timezone.utc)
     until = _floor_hour(now)
@@ -177,6 +177,7 @@ def hourly(args) -> int:
         ckpt.set("attribute", until)
 
         meta["queued"] = len(queue.enqueue(recs, store=store))
+        meta["queued_citizen"] = len(citizen.enqueue_clusters(store=store, now=now))
         publish(store, now, meta)
         ckpt.set("publish", until)
     except http.RateLimited as e:

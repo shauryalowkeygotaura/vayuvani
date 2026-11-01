@@ -1,0 +1,34 @@
+{
+  "_readme": "Agency recipients. The auto-sender ONLY emails addresses with verified=true. To verify: open source_url, confirm the address is listed for public complaints, set verified=true and verified_on. Found by web search on 2026-11-01; the official pages could not be opened from the build session.",
+  "CPCB": {
+    "role": "Central intake for air pollution complaints (forwards to the responsible agency)",
+    "emails": ["aircomplaints.cpcb@nic.in"],
+    "source_url": "https://www.cpcb.nic.in/air/Citizen_Guideliines_Air_Complaints.pdf",
+    "verified": false,
+    "verified_on": null
+  },
+  "DPCC": {
+    "role": "Delhi Pollution Control Committee: industry, construction dust",
+    "emails": ["chdpcc@nic.in"],
+    "source_url": "https://www.dpcc.delhigovt.nic.in/contact_us",
+    "note": "Listed as Chairman, all matters of DPCC. No dedicated air-complaint address found.",
+    "verified": false,
+    "verified_on": null
+  },
+  "MCD": {
+    "role": "Municipal Corporation of Delhi: open garbage/biomass burning, road dust",
+    "emails": [],
+    "source_url": "https://mcdonline.nic.in/",
+    "note": "No official complaint email confirmed. commissioner@mcdonline.gov.in appears only in an NGT filing. Until verified, MCD items go to the CPCB intake.",
+    "verified": false,
+    "verified_on": null
+  },
+  "Delhi Traffic Police": {
+    "role": "Congestion hotspots",
+    "emails": ["dcpthq-dtp@nic.in"],
+    "source_url": "https://traffic.delhipolice.gov.in/node/391",
+    "note": "Site lists jtcpt-dtp@nic.in, addlcpt-dtp@nic.in, dcpthq-dtp@nic.in for traffic complaints/suggestions (per search result).",
+    "verified": false,
+    "verified_on": null
+  }
+}

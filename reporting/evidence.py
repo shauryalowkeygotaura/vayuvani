@@ -10,7 +10,7 @@ import os
 from datetime import timedelta, timezone
 from typing import Optional
 
-from attribution.config import PUBLIC_DIR
+from attribution.config import STATE_DIR
 from attribution.labels import LABELS_EN
 from .agencies import agencies_for
 
@@ -63,7 +63,7 @@ def build(rec: dict, root: Optional[str] = None) -> dict:
     if isinstance(shares, str):
         shares = json.loads(shares)
     top = rec.get("top_source")
-    d = os.path.join(root or PUBLIC_DIR, "evidence", rec["id"])
+    d = os.path.join(root or STATE_DIR, "evidence", rec["id"])
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "chart.svg"), "w", encoding="utf-8") as f:
         f.write(chart_svg(ev.get("hourly") or []))

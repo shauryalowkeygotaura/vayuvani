@@ -39,6 +39,8 @@ TABLE_KEYS: dict[str, tuple[str, ...]] = {
     "fire_points": ("source", "latitude", "longitude", "acq_time"),
     "attributions": ("station_id", "window_start"),
     "complaint_queue": ("attribution_id",),
+    "citizen_reports": ("id",),
+    "report_digests": ("agency", "day"),
 }
 
 PAGE = 1000
@@ -204,7 +206,7 @@ class LocalStore:
             if col not in df.columns:
                 return []
             series = df[col]
-            if op in ("gte", "lte", "gt", "lt") and col in ("hour", "window_start", "acq_time", "created_at"):
+            if op in ("gte", "lte", "gt", "lt") and col in ("hour", "window_start", "window_end", "acq_time", "created_at", "timestamp"):
                 series = pd.to_datetime(series, utc=True, format="ISO8601")
                 val = pd.Timestamp(val)
                 val = val.tz_localize("UTC") if val.tzinfo is None else val

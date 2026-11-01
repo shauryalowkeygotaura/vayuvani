@@ -1,18 +1,23 @@
-name: Kaun approve complaint
+name: Kaun approve report
 
-# One-tap human approval for a queued complaint (run from the GitHub app:
-# Actions -> Kaun approve complaint -> Run workflow). Nothing is ever sent
-# without this. The output is an outbox file for the human to deliver.
+# One-tap human decision on a queued report (GitHub app: Actions -> Kaun
+# approve report -> Run workflow). Needed when KAUN_AUTO_SEND is off; with it
+# on, use "reject" to stop a report before the next daily digest.
 
 on:
   workflow_dispatch:
     inputs:
       attribution_id:
-        description: "Complaint id (16 hex chars, from the evidence pack)"
+        description: "Report id (16 hex chars, the VV-xxxx reference without VV-)"
         required: true
       approver:
-        description: "Your name (recorded on the complaint)"
+        description: "Your name (recorded on the report)"
         required: true
+      decision:
+        description: "approve or reject"
+        type: choice
+        options: [approve, reject]
+        default: approve
 
 permissions:
   contents: read
@@ -27,17 +32,15 @@ jobs:
           python-version: "3.13"
           cache: pip
       - run: pip install -r requirements-engine.txt
-      - name: Approve and render outbox
+      - name: Record decision
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
           KAUN_AGENCY_CONTACTS: ${{ secrets.KAUN_AGENCY_CONTACTS }}
           ATTRIBUTION_ID: ${{ inputs.attribution_id }}
           APPROVER: ${{ inputs.approver }}
+          DECISION: ${{ inputs.decision }}
         # Inputs go through env vars, never interpolated into the shell line;
         # queue.approve() whitelists both before they reach a query.
-        run: python -m reporting.queue approve "$ATTRIBUTION_ID" --by "$APPROVER"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: outbox
-          path: .kaun_state/outbox
+        # Approved reports go out in the next daily digest (kaun-report.yml).
+        run: python -m reporting.queue "$DECISION" "$ATTRIBUTION_ID" --by "$APPROVER"
