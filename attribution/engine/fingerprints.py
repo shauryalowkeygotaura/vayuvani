@@ -57,6 +57,10 @@ def station_ratio_history(hist) -> dict[str, np.ndarray]:
         if num in hist:
             r = (hist[num].astype(float) / dpm).to_numpy()
             out[name] = r[np.isfinite(r)]
+    if "delta_pm10" in hist:
+        dpm10 = hist["delta_pm10"].astype(float).where(hist["delta_pm10"] > 10)
+        r = (dpm / dpm10).clip(upper=1.0).to_numpy()
+        out["fine"] = r[np.isfinite(r)]
     return out
 
 
@@ -118,7 +122,11 @@ def score(d: dict, totals: dict, ratio_hist: dict, traffic_prior: float = 0.5) -
         scores["traffic"] = _clip01((t - 0.4) / 0.5) * (0.8 + 0.4 * traffic_prior)
 
     if fine is not None:
-        comb = _clip01((fine - 0.45) / 0.3)
+        # Station-relative: post-monsoon Delhi air is fine-dominated everywhere
+        # (secondary aerosol), so an absolute cut-off calls every spike burning.
+        # Burning must also be finer than this station's usual excess.
+        p_fine = _pct(fine, ratio_hist.get("fine"))
+        comb = _clip01((fine - 0.45) / 0.3) * (0.4 + 0.6 * p_fine)
         low_traffic = 1.0 - 0.6 * (p_no2 if has["no2"] else 0.5)
         co_ok = 1.0 if not has["co"] else (0.6 + 0.4 * (1.0 - abs(p_co - 0.5) * 2))
         scores["biomass_burning"] = comb * low_traffic * co_ok
@@ -143,6 +151,7 @@ def score(d: dict, totals: dict, ratio_hist: dict, traffic_prior: float = 0.5) -
             "dCO_dPM25_mg_per_ug": None if co_pm is None else round(co_pm, 5),
             "dSO2_dPM25": None if so2_pm is None else round(so2_pm, 3),
             "fine_fraction": None if fine is None else round(fine, 3),
+            "pct_fine": round(_pct(fine, ratio_hist.get("fine")), 2) if fine is not None else None,
             "pct_no2_pm": round(p_no2, 2), "pct_co_pm": round(p_co, 2), "pct_so2_pm": round(p_so2, 2),
         },
     }
