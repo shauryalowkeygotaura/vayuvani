@@ -25,10 +25,12 @@ FIRMS_DAY_RANGE = 2
 # (same convention as pipeline/aqi_calc.py and the aqi_readings table).
 POLLUTANTS = ("pm25", "pm10", "no2", "so2", "co", "o3")
 # Extra station variables used as source evidence (not in the NAQI):
-#   no, nox: ug/m3 (NOx as NO2-equivalent); fresh exhaust is NO-rich.
+#   no: ug/m3; fresh exhaust is NO-rich (NO fraction of NO+NO2).
+#   (OpenAQ's CPCB "nox" sensors are mislabelled: tagged ppb, values ~1000x
+#   too small and inconsistent with NO + NO2, checked 2026-11-01. Not used.)
 #   rh: %, temp: deg C; humid, cool air grows secondary fine particles.
-EXTRA_VARS = ("no", "nox", "rh", "temp")
-DELTA_VARS = POLLUTANTS + ("no", "nox")
+EXTRA_VARS = ("no", "rh", "temp")
+DELTA_VARS = POLLUTANTS + ("no",)
 
 # Ingest window: a normal hourly run fetches since the checkpoint, capped so a
 # long outage cannot turn one run into thousands of calls.

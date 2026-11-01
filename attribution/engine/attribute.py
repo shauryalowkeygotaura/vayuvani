@@ -73,9 +73,10 @@ def _summary(name: str, start, end, shares: dict, sector: Optional[str], conf: s
     top = max(shares, key=shares.get)
     pct = int(round(shares[top] * 100 / 5.0) * 5)
     pct_txt = "90%+" if shares[top] >= 0.9 else f"~{pct}%"
-    where_en = (" from nearby (calm wind)" if calm else
+    regional_top = top in ("regional_background", "transported_smoke", "secondary")
+    where_en = (" across the region" if regional_top else " from nearby (calm wind)" if calm else
                 f" arriving from the {wind_sector.SECTORS_EN[sector]}" if sector else "")
-    where_hi = (" पास से (हवा शांत)" if calm else
+    where_hi = (" पूरे इलाके में" if regional_top else " पास से (हवा शांत)" if calm else
                 f" {wind_sector.SECTORS_HI[sector]} दिशा से" if sector else "")
     en = f"Spike at {name}, {when}: {pct_txt} {LABELS_EN[top]}{where_en}, confidence {conf}."
     hi = f"{name} में {when} प्रदूषण बढ़ा: {pct_txt.replace('~', 'लगभग ')} {LABELS_HI[top]}{where_hi}, भरोसा {CONF_HI[conf]}।"

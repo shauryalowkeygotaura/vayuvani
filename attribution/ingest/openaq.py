@@ -47,7 +47,7 @@ def _parse_dt(raw) -> Optional[datetime]:
 
 WIND_PARAMS = ("wind_speed", "wind_direction")
 # OpenAQ parameter name -> our column, for the extra evidence variables.
-EXTRA_PARAMS = {"no": "no", "nox": "nox", "relativehumidity": "rh", "temperature": "temp"}
+EXTRA_PARAMS = {"no": "no", "relativehumidity": "rh", "temperature": "temp"}  # nox: see config.py
 
 
 def parse_locations(payloads: list[dict], now: Optional[datetime] = None) -> list[dict]:

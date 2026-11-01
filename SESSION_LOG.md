@@ -40,3 +40,11 @@
 **Blocked / not verified**
 - Supabase: 502 from upstream (project likely paused). data.gov.in: connection reset. Overpass, cpcb.nic.in, dpcc.delhigovt.nic.in, traffic.delhipolice.gov.in: blocked here. So: no DB writes, land use is fixture-only, agency emails unverified (all `verified: false`).
 - No VAPI/SMTP credentials: phone line and email sending tested with fakes only.
+
+**First live snapshot with full fusion (local store, 2026-11-01 ~08:00 UTC, NOT validated)**
+- Variable coverage over 8 days: PM2.5 93%, PM10 88%, NO2 94%, SO2 79%, CO 91%, O3 93%, NO 92%, RH 78%, temp 71%. Land use: none (Overpass blocked here; fills in CI).
+- 79 spike windows in the last 48 h across 54 stations. Top source: biomass/garbage burning 36, regional background 19, traffic 12, dust 6, industry 4, secondary 2. Confidence: high 3, medium 49, low 27.
+- Before fusion (rules only) the same data gave biomass 43/69. Changes that moved it: station-relative fine fraction, the RH/secondary term, NO fraction, rebalanced fingerprint weight, and "transported smoke" now needing >= 2 m/s steady 24 h wind (it fell from 11 to 0 in this stagnant window, which matches CSE's small stubble share but proves nothing).
+- Live data bugs found: OpenAQ CPCB "nox" sensors mislabelled (ppb tag, values ~1000x low, inconsistent with NO + NO2), so they are dropped and NO fraction comes from NO and NO2.
+- Phone answers on the live feed: 0-3 ms from the gazetteer, 433 ms with a Nominatim lookup.
+- Did NOT merge PR #1: Supabase is down (502), so the hourly cron on master would fail its pre-flight every hour and open alert issues. Merge after the Supabase project is restored and migrations 002-004 are run.

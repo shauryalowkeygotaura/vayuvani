@@ -26,9 +26,10 @@ def test_no_evidence_is_uniform():
 
 
 def test_fresh_no_favours_traffic():
-    assert fusion.term_fresh_no({"no": 60.0, "nox": 120.0})["traffic"] > 0     # NO-rich
-    assert fusion.term_fresh_no({"no": 5.0, "nox": 120.0})["traffic"] < 0      # aged
-    assert fusion.term_fresh_no({"no": None, "nox": 50.0}) == {}
+    assert fusion.term_fresh_no({"no": 60.0, "no2": 60.0})["traffic"] > 0      # NO-rich (~0.6 by moles)
+    assert fusion.term_fresh_no({"no": 5.0, "no2": 120.0})["traffic"] < 0      # aged
+    assert fusion.term_fresh_no({"no": None, "no2": 50.0}) == {}
+    assert fusion.term_fresh_no({"no": 1.0, "no2": 2.0}) == {}                 # too small to read
 
 
 def test_humid_fine_weak_combustion_is_secondary():

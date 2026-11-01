@@ -15,7 +15,7 @@ Terms and the variables they use:
   T1 fingerprint      delta-ratio scores from fingerprints.py (NO2/PM2.5, CO/PM2.5,
                       SO2/PM2.5, fine fraction), station-relative percentiles
   T2 secondary/RH     relative humidity x fine fraction x weak combustion markers
-  T3 fresh NO         dNO / dNOx (NO-rich = fresh exhaust close by)
+  T3 fresh NO         dNO / (dNO + dNO2) by moles (NO-rich = fresh exhaust close by)
   T4 time/temp        traffic diurnal prior; cold nights favour burning
   T5 upwind land use  OSM inventory in the window's wind sector vs all sectors
   T6 per-pollutant    CBPF of each source's marker pollutant (NO2, SO2, PM10, CO)
@@ -47,7 +47,7 @@ LANDUSE_MAP = {  # feature -> {source: weight}
 }
 LANDUSE_PSEUDO = {"roads": 2.0}  # smoothing (km of road); other features: 0.5
 CBPF_MARKERS = {"traffic": ("no2", "no"), "industry": ("so2",), "dust": ("pm10",), "biomass_burning": ("co",)}
-W = {"T1": 2.0, "T2": 2.0, "T3": 1.5, "T4": 1.0, "T5": 0.8, "T6": 0.5, "T7": 1.5, "T8": 0.5}
+W = {"T1": 1.5, "T2": 2.0, "T3": 1.5, "T4": 1.0, "T5": 0.8, "T6": 0.5, "T7": 1.5, "T8": 0.5}
 
 
 def _clip(x, lo, hi):
@@ -64,7 +64,8 @@ def _neighbours(sector: str) -> tuple[str, str]:
 
 
 def term_fingerprint(fp_scores: dict) -> dict:
-    return {s: W["T1"] * math.log((fp_scores.get(s, 0.0) + 0.05) / 0.3)
+    # Bounded to about -1.2 .. +1.5 so a zero rule score cannot veto the other terms.
+    return {s: W["T1"] * math.log((fp_scores.get(s, 0.0) + 0.2) / 0.45)
             for s in ("traffic", "biomass_burning", "industry", "dust")}
 
 
@@ -81,10 +82,14 @@ def term_secondary(ratios: dict, rh: Optional[float]) -> dict:
 
 
 def term_fresh_no(d: dict) -> dict:
-    no, nox = d.get("no"), d.get("nox")
-    if not (_finite(no) and _finite(nox)) or nox <= 5:
+    """NO share of the NOx excess, by moles: fresh exhaust is NO-rich, aged air NO2-rich."""
+    no, no2 = d.get("no"), d.get("no2")
+    if not (_finite(no) and _finite(no2)) or no < 0 or no2 < 0:
         return {}
-    frac = _clip((no * 46.01 / 30.01) / nox, 0.0, 1.0)   # NO as NO2-equivalent
+    mol_no, mol_no2 = no / 30.01, no2 / 46.01
+    if mol_no + mol_no2 < 0.2:   # < ~5 ppb of NOx excess: too small to read
+        return {}
+    frac = mol_no / (mol_no + mol_no2)
     return {"traffic": W["T3"] * (frac - 0.4) * 2.0}
 
 

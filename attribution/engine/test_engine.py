@@ -108,6 +108,8 @@ def test_regional_share_and_upwind_fires():
     up = regional.upwind_fires(fires, wind, hours[-1])
     assert up["count"] == 20
     assert regional.is_transported(0.5, up) and not regional.is_transported(0.1, up)
+    calm = dict(up, mean_speed_ms=0.8)
+    assert not regional.is_transported(0.5, calm)       # stagnant air cannot carry smoke 200 km
 
 
 def test_nmf_deterministic():

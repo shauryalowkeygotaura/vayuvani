@@ -79,11 +79,26 @@ def upwind_fires(fires: list[dict], wind: pd.DataFrame, at: pd.Timestamp) -> dic
     return {
         "upwind_dir_deg": round(mean_dir, 0),
         "wind_steadiness_24h": round(r, 2),
+        "mean_speed_ms": round(spd, 2),
         "count": len(recent),
         "frp_sum": round(frp, 1),
         "note": "straight-line 24 h mean wind, not a modelled back-trajectory",
     }
 
 
+MIN_TRANSPORT_WIND_MS = 2.0
+MIN_TRANSPORT_STEADINESS = 0.5
+
+
 def is_transported(reg_share: Optional[float], fires: dict) -> bool:
-    return bool(reg_share is not None and reg_share >= 0.3 and fires.get("count", 0) >= MIN_UPWIND_FIRES)
+    """
+    Regional excess + fires upwind + wind that can actually carry smoke: at
+    < 2 m/s or swirling wind, smoke from 100-300 km away cannot arrive within
+    a day, so a regional rise in stagnant air is called regional, not transported.
+    """
+    if reg_share is None or reg_share < 0.3 or fires.get("count", 0) < MIN_UPWIND_FIRES:
+        return False
+    spd, steady = fires.get("mean_speed_ms"), fires.get("wind_steadiness_24h")
+    if spd is None or steady is None:
+        return False
+    return spd >= MIN_TRANSPORT_WIND_MS and steady >= MIN_TRANSPORT_STEADINESS

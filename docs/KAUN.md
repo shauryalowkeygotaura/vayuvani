@@ -37,7 +37,7 @@ share is split off first (`regional.py`), and the posterior divides the local re
 |---|---|---|
 | fingerprint | dNO2/dPM2.5, dCO/dPM2.5, dSO2/dPM2.5, fine fraction; percentiles vs the station's own history | all four primary classes |
 | secondary_rh | relative humidity x fine fraction x weak CO/NO2 markers | secondary (and against burning) |
-| fresh_no | dNO / dNOx (NO as NO2-equivalent) | traffic (fresh exhaust close by) |
+| fresh_no | dNO / (dNO + dNO2) by moles (OpenAQ's NOx sensors are mislabelled, so not used) | traffic (fresh exhaust close by) |
 | time_temp | diurnal traffic prior; cold nights (< 18 C, 20:00-06:00 IST) | traffic, burning |
 | upwind_landuse | OSM industrial, power plants, kilns, landfills, construction, quarries, rail yards and major roads per wind sector (0-2/2-5/5-10 km, weights 1/0.5/0.25) vs the station's all-sector mean | the matching class |
 | pollutant_wind | CBPF of each class's marker pollutant (NO2/NO, SO2, PM10, CO) in the window's sector, as a z-score across sectors | the matching class |
