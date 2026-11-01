@@ -1,0 +1,43 @@
+name: Kaun approve complaint
+
+# One-tap human approval for a queued complaint (run from the GitHub app:
+# Actions -> Kaun approve complaint -> Run workflow). Nothing is ever sent
+# without this. The output is an outbox file for the human to deliver.
+
+on:
+  workflow_dispatch:
+    inputs:
+      attribution_id:
+        description: "Complaint id (16 hex chars, from the evidence pack)"
+        required: true
+      approver:
+        description: "Your name (recorded on the complaint)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  approve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Approve and render outbox
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
+          KAUN_AGENCY_CONTACTS: ${{ secrets.KAUN_AGENCY_CONTACTS }}
+          ATTRIBUTION_ID: ${{ inputs.attribution_id }}
+          APPROVER: ${{ inputs.approver }}
+        # Inputs go through env vars, never interpolated into the shell line;
+        # queue.approve() whitelists both before they reach a query.
+        run: python -m attribution.routing.queue approve "$ATTRIBUTION_ID" --by "$APPROVER"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: outbox
+          path: .kaun_state/outbox
