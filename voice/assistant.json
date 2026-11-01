@@ -1,0 +1,65 @@
+{
+  "name": "VayuVani",
+  "firstMessage": "नमस्ते, वायुवाणी में आपका स्वागत है। Hello, this is VayuVani. आप किस इलाके की हवा के बारे में जानना चाहते हैं? Which area are you calling about?",
+  "firstMessageMode": "assistant-speaks-first",
+  "transcriber": {
+    "provider": "deepgram",
+    "model": "nova-3",
+    "language": "multi"
+  },
+  "model": {
+    "provider": "groq",
+    "model": "openai/gpt-oss-20b",
+    "temperature": 0.2,
+    "maxTokens": 250,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are VayuVani, a Delhi air quality phone line. Reply in the caller's language: Hindi if they speak Hindi or Hinglish, otherwise English. Keep every reply under 3 short sentences; this is a phone call.\n\n1. Ask which area, colony, landmark or metro station they are near. Then call get_air_quality with that place and language 'hi' or 'en'. Read the tool's answer back naturally. Never invent AQI numbers or sources; only say what the tool returns.\n2. If the caller wants to complain about pollution they can see (garbage or leaf burning, construction dust, traffic smoke, a factory), collect: the place, the type (burning, dust, vehicular, industrial, other) and one line of details. Then call report_pollution. Tell them it will be checked and sent to the responsible department; do not promise action or a timeline.\n3. Medical emergencies: tell them to call 112. Do not give medical advice beyond the tool's general advice.\n4. Source estimates are estimates. If the tool says confidence low, say it is a guess."
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "get_air_quality",
+          "description": "Current air quality (NAQI), main pollutant, likely source of any recent spike, and advice for a place in Delhi NCR.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {"type": "string", "description": "Area, colony, landmark, metro station or PIN code the caller named, as spoken."},
+              "language": {"type": "string", "enum": ["hi", "en"], "description": "Language to answer in."}
+            },
+            "required": ["location", "language"]
+          }
+        },
+        "server": {"url": "https://REPLACE-WITH-VERCEL-DOMAIN/api/vapi"}
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "report_pollution",
+          "description": "Record a citizen pollution complaint. It is checked and forwarded to the responsible department by the daily reporting job.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "location": {"type": "string", "description": "Where the pollution is, as spoken."},
+              "pollution_type": {"type": "string", "enum": ["burning", "dust", "vehicular", "industrial", "other"]},
+              "details": {"type": "string", "description": "One line: what the caller sees, when it started."},
+              "language": {"type": "string", "enum": ["hi", "en"]}
+            },
+            "required": ["location", "pollution_type", "language"]
+          }
+        },
+        "server": {"url": "https://REPLACE-WITH-VERCEL-DOMAIN/api/vapi"}
+      }
+    ]
+  },
+  "voice": {
+    "provider": "11labs",
+    "voiceId": "REPLACE-WITH-A-HINDI-CAPABLE-VOICE-ID",
+    "model": "eleven_multilingual_v2"
+  },
+  "endCallPhrases": ["धन्यवाद, नमस्ते", "Thank you, goodbye"],
+  "maxDurationSeconds": 300
+}
