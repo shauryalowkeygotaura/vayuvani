@@ -19,6 +19,7 @@ You are working for Shaurya (Delhi, GitHub `shauryalowkeygotaura`). This repo is
 - Before committing, grep the diff for credentials (`gsk_`, `sk-`, `eyJhbGci`, `AIza`, Supabase keys). Never commit `.env`.
 
 ## Stack rules
+- **No VAPI, no paid voice APIs.** Voice = Pipecat + Groq + edge-tts (see `voice/reference/pipecat_stack/`).
 - **LLM provider: Groq, not Anthropic.** Use `advisory/groq_pool.py` (multi-key rotation across accounts, non-thinking models). Don't add Anthropic SDK calls.
 - **Secrets:** locally via `doppler run -- <cmd>`; in CI and cloud sessions via GitHub Actions secrets / env vars. Never hardcode.
 - **Vercel:** never `runtime = 'edge'`; use the Node runtime. When piping env values into `vercel env add`, use bash `printf '%s'` (no trailing newline, no BOM).
@@ -46,4 +47,4 @@ You are working for Shaurya (Delhi, GitHub `shauryalowkeygotaura`). This repo is
 
 ## Known watch list (from `bugs.md` in the vault)
 - OpenAQ/CPCB upstream schema changes can silently break ingest.
-- Voice advisory generation must stay under 2 s for the VAPI webhook.
+- Voice advisory generation must stay under 2 s for the phone line.

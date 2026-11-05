@@ -75,10 +75,10 @@ repo variable `KAUN_AUTO_SEND=1`; Vercel deploy + VAPI assistant + phone number.
 ## AUTOPILOT PROMPT (paste this into a fresh cloud session)
 
 ```
-Read CLAUDE.md, then NEXT.md, then docs/KAUN.md. Execute NEXT.md end to end, steps 1 through 9, without stopping to ask me anything. I am away; this is a long autonomous run with a budget of about $100 of tokens.
+Read CLAUDE.md, then NEXT.md, then docs/KAUN.md. Execute NEXT.md end to end, steps 1 through 11 (read "Decisions 2026-11-05" first; it overrides earlier steps), without stopping to ask me anything. I am away; this is a long autonomous run with a budget of about $100 of tokens.
 
 Rules for this run:
-1. Order: step 1, then 2, 3, 4, 5, 6 (set up the alert; you can't wait 7 days), 7, 8, 9. If a step is blocked (no network, missing secret, Step 0 not done by me), write exactly what blocks it in SESSION_LOG.md, then move to the next step that isn't blocked. Never sit idle and never stop at the first blocker.
+1. Order: skip boxes already ticked. Then 11 (report board), 10 (Pipecat phone), then any open boxes in 2-9. If a step is blocked (no network, missing secret, Step 0 not done by me), write exactly what blocks it in SESSION_LOG.md, then move to the next step that isn't blocked. Never sit idle and never stop at the first blocker.
 2. First action: test network to every host in Step 0 and to Supabase, and test whether the Kaun tables exist. Log the results. That tells you which steps are live and which are offline-only.
 3. Commit after every finished checkbox on branch claude/kaun-next (open a draft PR to master; merge PR #1 first if step 1 is green and the merge is clean). Small commits, plain messages, no AI attribution, no em dashes.
 4. Checkpoint: keep SESSION_LOG.md current after each step so a cut-off session can be resumed by a new one reading NEXT.md + SESSION_LOG.md.
@@ -86,3 +86,23 @@ Rules for this run:
 6. Honesty: never fake live results. Anything only tested on fixtures gets labelled "fixture-only" in docs and in the final report.
 7. Final report (in chat, starting with "Shaurya,"): what's done and verified, what's fixture-only, what's blocked and the exact thing I must do to unblock it, and the PR link.
 ```
+
+---
+
+## Decisions 2026-11-05 (Shaurya) - these override earlier steps
+- **Phone line: Shaurya's own Pipecat stack, NOT VAPI.** No VAPI spend, ever. Pattern is in `voice/reference/pipecat_stack/` (Groq STT + Groq LLM + edge-tts Neerja + Silero VAD + paralang). Keep the existing tool logic (`get_air_quality`, `report_pollution`, gazetteer) and swap the transport.
+- **Reporting: public report board on the website is the PRIMARY channel.** Email digests become optional (only if `SMTP_*` secrets exist). Don't automate agency portals (MCD 311, Green Delhi): no public API, OTP/CAPTCHA, terms risk.
+- Old "VayuVani AQI Pipeline" workflow is disabled on master (silently failing). Supabase project was deleted; Shaurya is creating a new one. Until then everything must run with `KAUN_STORE=local`.
+
+## Step 10: phone line on Pipecat
+- [ ] `voice/pipecat_agent.py`: port `rt_agent.py`'s pipeline; tools call the existing `voice/` handlers directly (no webhook hop). Hindi/English via paralang `ReplyRouter`. Answer from `public/data/now.json` + `latest.json`; target < 2 s to first audio.
+- [ ] **Browser transport first (free):** a "Talk to Kaun" button on the public page using Pipecat's WebRTC transport (SmallWebRTC or Daily free tier; prefer no-account options). Document where the agent process runs (it can't run on GitHub Pages: a free always-on host is needed, e.g. Hugging Face Spaces CPU or a free Fly/Render tier; verify current free limits with sources).
+- [ ] Phone transport later: Exotel SIP (~$0.007/min, KYC in Shaurya's name). Write `docs/PHONE.md` with the exact human steps; don't buy anything.
+- [ ] `--selftest` mode with text in/out so tests run without audio. Retire `voice/vapi.py`, `voice/assistant.json`, `voice/setup_vapi.py` and `api/vapi.py` to `legacy/`.
+
+## Step 11: public report board (primary reporting)
+- [ ] `public/reports.html` (+ link from the map): one card per high/medium attribution and per citizen-report cluster: station, time window, source + confidence, responsible agency, evidence pack (SVG chart + numbers), status (open / repeated / resolved-by-data when the spike stops recurring).
+- [ ] Per-agency pages (`reports.html?agency=MCD`) and a weekly summary ("MCD: 14 burning spikes in East Delhi, 9 repeated at the same station").
+- [ ] Data from `public/data/reports.json`, written by the hourly run. Caller numbers stay hashed; never publish raw phone numbers or free-text that could identify a caller.
+- [ ] Share-friendly: each card has a permalink and an OG image so it can be posted on X/WhatsApp by Shaurya (posting stays manual).
+- [ ] Email digest code stays but is opt-in; the board must work with zero secrets.
