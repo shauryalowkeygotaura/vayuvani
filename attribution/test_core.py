@@ -132,3 +132,39 @@ def test_hourly_rate_limit_keeps_checkpoint(tmp_path, monkeypatch):
     args = type("A", (), {"skip_preflight": True})()
     assert run.hourly(args) == run.EXIT_RATE
     assert Checkpoint(str(tmp_path / "checkpoint.json")).get("ingest") is None
+
+
+def _offline_preflight(monkeypatch):
+    """FIRMS/OpenAQ probes stubbed out so only the Supabase branch is exercised."""
+    from attribution import preflight
+    monkeypatch.setattr(preflight.http, "get_json", lambda *a, **k: {})
+    return preflight
+
+
+def test_preflight_skips_supabase_with_local_store(monkeypatch):
+    preflight = _offline_preflight(monkeypatch)
+    monkeypatch.setenv("KAUN_STORE", "local")
+    monkeypatch.setenv("SUPABASE_URL", "https://nonexistent-ref.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "x")
+
+    def no_network(*a, **k):
+        raise AssertionError("Supabase must not be probed when KAUN_STORE=local")
+
+    monkeypatch.setattr(preflight, "SupabaseStore", no_network)
+    assert preflight.check(require_firms=False) == []
+
+
+def test_preflight_reports_unresolvable_supabase(monkeypatch):
+    import requests
+    preflight = _offline_preflight(monkeypatch)
+    monkeypatch.delenv("KAUN_STORE", raising=False)
+    monkeypatch.setenv("SUPABASE_URL", "https://nonexistent-ref.supabase.co")
+    monkeypatch.setenv("SUPABASE_KEY", "x")
+
+    class DeadStore:
+        def select(self, *a, **k):
+            raise requests.exceptions.ConnectionError("Failed to resolve host")
+
+    monkeypatch.setattr(preflight, "SupabaseStore", DeadStore)
+    problems = preflight.check(require_firms=False)
+    assert len(problems) == 1 and "unreachable" in problems[0]

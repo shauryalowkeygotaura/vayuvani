@@ -9,6 +9,8 @@ import logging
 import os
 import sys
 
+import requests
+
 from . import http
 from .store import TABLE_KEYS, SupabaseStore
 
@@ -23,8 +25,11 @@ def _fail(msg: str, fix: str) -> str:
     return f"  FAIL  {msg}\n        fix: {fix}"
 
 
-def check(require_supabase: bool = True, require_firms: bool = True) -> list[str]:
+def check(require_supabase: bool | None = None, require_firms: bool = True) -> list[str]:
     problems: list[str] = []
+    if require_supabase is None:
+        # KAUN_STORE=local runs never touch Supabase, so don't gate them on it.
+        require_supabase = os.getenv("KAUN_STORE", "").lower() != "local"
 
     # FIRMS: key present and accepted by the status endpoint.
     key = os.getenv("FIRMS_MAP_KEY", "").strip()
@@ -78,6 +83,12 @@ def check(require_supabase: bool = True, require_firms: bool = True) -> list[str
             except http.ExternalError as e:
                 problems.append(_fail(f"Supabase check failed: {e}",
                                       "run supabase/migrations/002_kaun.sql in the Supabase SQL editor"))
+            except requests.exceptions.RequestException as e:
+                problems.append(_fail(f"Supabase unreachable: {e}",
+                                      "the project may be paused or deleted: restore it at "
+                                      "https://supabase.com/dashboard (or create a new one, run "
+                                      "supabase/migrations/*.sql, update SUPABASE_URL/SUPABASE_KEY); "
+                                      "set KAUN_STORE=local to run without it"))
 
     # CPCB via data.gov.in is optional.
     from .ingest.cpcb import api_key

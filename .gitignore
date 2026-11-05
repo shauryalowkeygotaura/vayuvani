@@ -7,3 +7,4 @@ __pycache__/
 public/data/
 public/evidence/
 .pytest_cache/
+.venv/
