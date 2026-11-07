@@ -16,6 +16,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from . import groq_pool
+from .fallbacks import fallback_advisory
 from .prompts import AdvisoryInput, build_prompt, time_of_day
 
 load_dotenv()
@@ -37,11 +38,35 @@ def generate_advisory(
     dominant_pollutant: str,
     language: str = "en",
     hour_utc: Optional[int] = None,
+    latitude: Optional[float] = None,
+    longitude: Optional[float] = None,
 ) -> str:
     """
     Generate a plain-language health advisory for voice output.
     Returns the advisory string, or a safe fallback if generation fails.
+    With caller coordinates, appends the "Kaun?" line (who caused the latest
+    nearby spike) from the attribution feed: a template, no extra LLM call.
     """
+    advisory = _generate(neighborhood, station_name, aqi, category, pm25, pm10, no2,
+                         dominant_pollutant, language, hour_utc)
+    return with_kaun(advisory, latitude, longitude, language)
+
+
+def with_kaun(advisory: str, latitude: Optional[float], longitude: Optional[float],
+              language: str) -> str:
+    if latitude is None or longitude is None:
+        return advisory
+    try:
+        from attribution.publish.voice import answer
+        line = answer(latitude, longitude, language)
+    except Exception as e:  # the advisory must never fail because of Kaun
+        logger.warning(f"Kaun line skipped: {e}")
+        return advisory
+    return f"{advisory} {line}" if line else advisory
+
+
+def _generate(neighborhood, station_name, aqi, category, pm25, pm10, no2,
+              dominant_pollutant, language, hour_utc) -> str:
     if hour_utc is None:
         hour_utc = datetime.now(timezone.utc).hour
 
@@ -101,21 +126,4 @@ def _reads_clean(text: str, language: str) -> bool:
 
 def _fallback_advisory(category: str, language: str) -> str:
     """Safe static fallback if LLM call fails."""
-    fallbacks_en = {
-        "Good": "Air quality in your area is good today. You can go outside freely.",
-        "Satisfactory": "Air quality is satisfactory. People with breathing conditions should limit outdoor time.",
-        "Moderate": "Air quality is moderate. Limit outdoor exercise and wear a mask if you have breathing problems.",
-        "Poor": "Air quality is poor. Everyone should reduce outdoor time and wear an N95 mask if going outside.",
-        "Very Poor": "Air quality is very poor. Stay indoors and avoid all outdoor activity.",
-        "Severe": "Air quality is at emergency levels. Do not go outside. Seal windows and doors.",
-    }
-    fallbacks_hi = {
-        "Good": "आपके क्षेत्र में हवा आज अच्छी है। आप बाहर जा सकते हैं।",
-        "Satisfactory": "हवा संतोषजनक है। सांस की बीमारी वालों को बाहर कम समय बिताना चाहिए।",
-        "Moderate": "हवा मध्यम स्तर की है। बाहरी व्यायाम सीमित करें।",
-        "Poor": "हवा खराब है। बाहर कम निकलें और N95 मास्क पहनें।",
-        "Very Poor": "हवा बहुत खराब है। घर के अंदर रहें।",
-        "Severe": "हवा की स्थिति आपातकालीन है। बाहर बिल्कुल न जाएं।",
-    }
-    table = fallbacks_hi if language == "hi" else fallbacks_en
-    return table.get(category, table["Severe"])
+    return fallback_advisory(category, language)

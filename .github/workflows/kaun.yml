@@ -1,0 +1,101 @@
+name: Kaun hourly attribution
+
+on:
+  schedule:
+    - cron: "17 * * * *"   # hourly at :17 (off the :00 rush; CPCB hours land by then)
+  workflow_dispatch:
+
+concurrency:
+  group: kaun-hourly
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  issues: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      published: ${{ steps.check.outputs.published }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements-engine.txt
+
+      # Checkpoint carried between runs: restore the newest, save under a new key.
+      - name: Restore checkpoint
+        uses: actions/cache/restore@v4
+        with:
+          path: .kaun_state
+          key: kaun-state-${{ github.run_id }}
+          restore-keys: kaun-state-
+
+      - name: Tests
+        run: python -m pytest
+
+      - name: Ingest, attribute, publish, queue
+        id: kaun
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY || secrets.SUPABASE_KEY }}
+          OPENAQ_API_KEY: ${{ secrets.OPENAQ_API_KEY }}
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          DATA_GOV_IN_API_KEY: ${{ secrets.DATA_GOV_IN_API_KEY }}
+          KAUN_AGENCY_CONTACTS: ${{ secrets.KAUN_AGENCY_CONTACTS }}
+        run: python -m attribution.run hourly
+
+      - name: Save checkpoint
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .kaun_state
+          key: kaun-state-${{ github.run_id }}
+
+      - name: Check feed is fresh
+        id: check
+        run: |
+          f=public/data/latest.json
+          test -s "$f" || { echo "no feed written"; exit 1; }
+          age=$(( $(date +%s) - $(stat -c %Y "$f") ))
+          echo "feed age ${age}s"
+          test "$age" -lt 1800 || { echo "feed is stale"; exit 1; }
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: run
+    if: needs.run.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  alert:
+    needs: [run, deploy]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "Kaun hourly run failing";
+            const body = `Run failed: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const {data: issues} = await github.rest.issues.listForRepo({...context.repo, state: "open", labels: "kaun-alert"});
+            const hit = issues.find(i => i.title === title);
+            if (hit) await github.rest.issues.createComment({...context.repo, issue_number: hit.number, body});
+            else await github.rest.issues.create({...context.repo, title, body, labels: ["kaun-alert"]});

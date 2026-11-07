@@ -15,8 +15,14 @@ class TestSubIndex:
         idx = _sub_index("pm25", 45.0)
         assert 51 <= idx <= 100
 
-    def test_pm25_severe(self):
-        assert _sub_index("pm25", 400.0) == 500
+    def test_pm25_severe_band(self):
+        # Severe starts at PM2.5 > 250 (sub-index 401). The band is open-ended in
+        # the published NAQI table; the interpolation ceiling (here 500 ug/m3) is
+        # a convention, and CPCB's calculator sheet was not reachable to confirm
+        # it (see SESSION_LOG 2026-11-01). Test only what the table pins down.
+        assert _sub_index("pm25", 250.0) == 400
+        assert 401 <= _sub_index("pm25", 400.0) <= 500
+        assert _sub_index("pm25", 600.0) == 500
 
     def test_pm10_good(self):
         assert _sub_index("pm10", 25.0) == 25

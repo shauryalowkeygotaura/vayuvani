@@ -1,63 +1,64 @@
-# VayuVani
+# VayuVani (वायुवाणी)
 
-Voice-interactive AI system for real-time Delhi air quality advisories.
+Delhi air quality by phone, with an answer to "who is polluting it?", and automatic reports to the agency
+that owns the problem.
 
-## Quick Start (Week 1 — Data Pipeline)
+- **Call in** (Hindi/English): you hear AQI at the nearest working station, the main pollutant, the likely
+  source of any recent spike, and advice. You can also report burning, dust or smoke you can see.
+- **Kaun? (कौन?)**: every hour, station data, wind and satellite fires are turned into source estimates
+  per station. Each estimate carries a confidence. Public map: https://shauryalowkeygotaura.github.io/vayuvani/
+- **Reports itself**: high-confidence hotspots and corroborated caller complaints go out as one daily
+  digest per agency (MCD, DPCC, Delhi Traffic Police, or the CPCB intake). The sends are gated: see
+  `docs/REPORTING.md`.
 
-```bash
-cd vayuvani
-pip install -r requirements.txt
-cp .env.example .env
-# Fill SUPABASE_URL and SUPABASE_KEY in .env
+Architecture and layout: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Method and limits:
+[`docs/KAUN.md`](docs/KAUN.md). Phone setup: [`docs/VOICE.md`](docs/VOICE.md).
 
-# 1. Set up database (paste supabase/schema.sql into Supabase SQL editor)
-
-# 2. Seed stations (one-time)
-python -m pipeline.seed_stations
-
-# 3. Verify data is flowing
-python -m pipeline.scheduler --once
-
-# 4. Run continuously (every 15 min)
-python -m pipeline.scheduler
-```
-
-## Run Tests
+## Run it
 
 ```bash
-python -m pytest pipeline/test_aqi_calc.py pipeline/test_cleaner.py -v
+pip install -r requirements-engine.txt
 ```
 
-## n8n Workflow
-
-Import `n8n/workflow.json` into your n8n instance:
-- Settings → Import from File → select `workflow.json`
-- Add environment variables: `SUPABASE_URL`, `SUPABASE_KEY`, `CPCB_API_KEY`
-- Activate the workflow
-
-## Project Structure
-
-```
-vayuvani/
-├── pipeline/
-│   ├── aqi_calc.py        India NAQI calculator
-│   ├── fetcher.py         OpenAQ + CPCB data fetchers
-│   ├── cleaner.py         Validation + normalization
-│   ├── db.py              Supabase read/write layer
-│   ├── scheduler.py       15-min APScheduler runner
-│   ├── seed_stations.py   One-time station seeder
-│   ├── test_aqi_calc.py   AQI unit tests
-│   └── test_cleaner.py    Cleaner unit tests
-├── supabase/
-│   └── schema.sql         Full DB schema + RPC functions
-├── n8n/
-│   └── workflow.json      Importable n8n workflow
-├── .env.example
-├── requirements.txt
-└── README.md
+```bash
+python -m pytest
 ```
 
-## Week 2 Preview
+```bash
+python -m attribution.run demo
+```
 
-Next: LLM reasoning layer over RAG (CPCB guidelines + WHO standards).
-Prompt + advisory generation will live in `advisory/`.
+```bash
+doppler run -- python -m attribution.preflight
+```
+
+```bash
+doppler run -- python -m attribution.run hourly
+```
+
+```bash
+doppler run -- python -m reporting.digest --dry-run
+```
+
+`demo` runs offline on synthetic data and is never published. The last three need secrets (Doppler
+locally, GitHub Actions secrets in CI).
+
+## Database
+
+Run `supabase/migrations/001_base.sql`, `002_kaun.sql`, `003_voice_reporting.sql` and `004_fusion_vars.sql` in order in the
+Supabase SQL editor.
+
+## Automation
+
+| Workflow | When | Does |
+|---|---|---|
+| `kaun.yml` | hourly :17 | ingest, attribute, queue reports, publish feeds, deploy Pages, open an issue on failure |
+| `kaun-report.yml` | daily 10:11 IST | agency digests (auto only if `KAUN_AUTO_SEND=1`) |
+| `kaun-approve.yml` | manual | approve or reject one report |
+| `legacy-aqi-pipeline.yml` | manual | old 15-minute fetcher into `aqi_readings` |
+
+## Honest limits
+
+Traffic vs smoke (CO and NO2 relative to PM2.5) is the reliable split. Industry and dust rest on one signal
+each, and 3+ source splits are capped at medium confidence. Wind is station-measured where OpenAQ has it,
+otherwise modelled. Transport from upwind fires is a straight-line proxy. Details in `docs/KAUN.md`.

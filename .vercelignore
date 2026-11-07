@@ -1,0 +1,21 @@
+# The webhook only needs voice/, api/, advisory/fallbacks.py and the stdlib
+# parts of attribution/. Keep the bundle small for fast cold starts.
+.github
+legacy
+research
+pipeline
+supabase
+public
+docs
+hardware
+reporting
+attribution/engine
+attribution/ingest
+attribution/validation
+attribution/run.py
+attribution/store.py
+attribution/synthetic.py
+attribution/preflight.py
+**/test_*.py
+**/fixtures
+requirements-engine.txt

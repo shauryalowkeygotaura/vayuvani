@@ -103,7 +103,7 @@ def get_latest_for_neighborhood(lat: float, lon: float, radius_km: float = 5.0) 
     Get the most recent AQI reading within radius_km of coordinates.
     Uses Supabase PostGIS-style distance filter via RPC.
 
-    Requires this SQL function in Supabase (see supabase/schema.sql):
+    Requires this SQL function in Supabase (see supabase/migrations/001_base.sql):
         get_nearest_reading(lat, lon, radius_km)
     """
     client = get_client()

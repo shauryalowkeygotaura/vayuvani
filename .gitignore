@@ -3,3 +3,9 @@
 !.env.example
 __pycache__/
 *.pyc
+.kaun_state/
+public/data/
+public/evidence/
+.pytest_cache/
+.venv/
+supabase/.temp/
