@@ -168,3 +168,23 @@ def test_preflight_reports_unresolvable_supabase(monkeypatch):
     monkeypatch.setattr(preflight, "SupabaseStore", DeadStore)
     problems = preflight.check(require_firms=False)
     assert len(problems) == 1 and "unreachable" in problems[0]
+
+
+def test_http_sends_identifying_user_agent(monkeypatch):
+    seen = {}
+
+    class Resp:
+        status_code = 200
+        text = "{}"
+
+        def json(self):
+            return {}
+
+    def fake_get(url, params=None, headers=None, timeout=None):
+        seen.update(headers or {})
+        return Resp()
+
+    monkeypatch.setattr(http.requests, "get", fake_get)
+    http.get("https://example.org", headers={"X-API-Key": "k"}, retries=1)
+    assert seen["User-Agent"].startswith("VayuVani-Kaun/")
+    assert seen["X-API-Key"] == "k"

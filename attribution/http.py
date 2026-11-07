@@ -17,6 +17,10 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+# Overpass and other OSM services ask for an identifying User-Agent; the default
+# python-requests one is often throttled or refused.
+USER_AGENT = "VayuVani-Kaun/1.0 (+https://github.com/shauryalowkeygotaura/vayuvani)"
+
 
 class ExternalError(Exception):
     """Base class for upstream failures."""
@@ -47,6 +51,7 @@ def get(
     session: Optional[requests.Session] = None,
 ) -> requests.Response:
     s = session or requests
+    headers = {"User-Agent": USER_AGENT, **(headers or {})}
     last_exc: Optional[Exception] = None
     for attempt in range(retries):
         try:

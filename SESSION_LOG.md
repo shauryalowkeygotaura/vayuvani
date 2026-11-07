@@ -48,3 +48,12 @@
 - Live data bugs found: OpenAQ CPCB "nox" sensors mislabelled (ppb tag, values ~1000x low, inconsistent with NO + NO2), so they are dropped and NO fraction comes from NO and NO2.
 - Phone answers on the live feed: 0-3 ms from the gazetteer, 433 ms with a Nominatim lookup.
 - Did NOT merge PR #1: Supabase is down (502), so the hourly cron on master would fail its pre-flight every hour and open alert issues. Merge after the Supabase project is restored and migrations 002-004 are run.
+
+## 2026-11-07 (local laptop): first full live hourly run, KAUN_STORE=local
+
+- Supabase project was DELETED (NXDOMAIN); Shaurya is creating a new one. Old "VayuVani AQI Pipeline" workflow disabled on master (it was green while every write failed).
+- Pre-flight fix (058d5fe): skips Supabase under KAUN_STORE=local; unreachable project gives a fix message, not a traceback.
+- Live run: exit 0. 54 OpenAQ stations, 311 station-hours (window 2026-11-06 18:00 to 11-07 03:00 UTC), 1,512 Open-Meteo wind hours, 549 FIRMS fires. 0 attributions: expected, the spike detector needs the 7-day baseline, so run the backfill first.
+- **Slow ingest:** OpenAQ took ~14 min for a 9-hour window (per-sensor calls under the 60/min key limit). The hourly CI job must fit inside its timeout: check `timeout-minutes` in kaun.yml and consider fetching only new hours per sensor.
+- **Overpass:** overpass-api.de returned 406 for every station, then timeouts; mirrors (private.coffee, kumi.systems) returned 429/timeouts. Cause not confirmed. Added an identifying User-Agent to `attribution/http.py` (OSM etiquette; Nominatim already had one). Land use degrades gracefully (0 refreshed, 54 due). Suggest: mirror fallback list + POST queries + cache land use for 30 days (it barely changes).
+- Decisions 2026-11-05 in NEXT.md still apply (Pipecat phone, report board primary).
