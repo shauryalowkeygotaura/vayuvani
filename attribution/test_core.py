@@ -188,3 +188,30 @@ def test_http_sends_identifying_user_agent(monkeypatch):
     http.get("https://example.org", headers={"X-API-Key": "k"}, retries=1)
     assert seen["User-Agent"].startswith("VayuVani-Kaun/")
     assert seen["X-API-Key"] == "k"
+
+
+def test_supabase_upsert_sends_uniform_keys_per_request():
+    """PostgREST bulk insert rejects mixed key sets (PGRST102)."""
+    import json as _json
+    from attribution.store import SupabaseStore
+
+    posts = []
+
+    class Resp:
+        status_code = 201
+        text = ""
+
+    class FakeSession:
+        def post(self, url, params=None, headers=None, data=None, timeout=None):
+            posts.append(_json.loads(data))
+            return Resp()
+
+    s = SupabaseStore(url="https://x.supabase.co", key="k")
+    s.session = FakeSession()
+    rows = [{"station_id": "a", "hour": "2026-11-07T05:00:00+00:00", "pm25": 1.0},
+            {"station_id": "b", "hour": "2026-11-07T05:00:00+00:00", "pm25": 2.0, "no": 3.0},
+            {"station_id": "c", "hour": "2026-11-07T05:00:00+00:00", "pm25": 4.0}]
+    assert s.upsert("hourly_obs", rows) == 3
+    for batch in posts:
+        assert len({frozenset(r) for r in batch}) == 1
+    assert sorted(r["station_id"] for b in posts for r in b) == ["a", "b", "c"]

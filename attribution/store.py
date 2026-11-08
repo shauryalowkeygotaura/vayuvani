@@ -111,9 +111,14 @@ class SupabaseStore:
         if not rows:
             return 0
         on_conflict = ",".join(TABLE_KEYS[table])
+        # PostgREST bulk inserts need one key set per request (PGRST102), and
+        # stations report different pollutants. Group by key set rather than
+        # padding with nulls, so a missing column still means "leave it alone".
+        groups: dict[frozenset, list[dict]] = {}
+        for r in rows:
+            groups.setdefault(frozenset(r), []).append(r)
         n = 0
-        for i in range(0, len(rows), chunk):
-            part = rows[i:i + chunk]
+        for part in (g[i:i + chunk] for g in groups.values() for i in range(0, len(g), chunk)):
             resp = self.session.post(
                 f"{self.url}/rest/v1/{table}",
                 params={"on_conflict": on_conflict},
