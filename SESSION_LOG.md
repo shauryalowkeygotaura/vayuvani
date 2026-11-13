@@ -57,3 +57,19 @@
 - **Slow ingest:** OpenAQ took ~14 min for a 9-hour window (per-sensor calls under the 60/min key limit). The hourly CI job must fit inside its timeout: check `timeout-minutes` in kaun.yml and consider fetching only new hours per sensor.
 - **Overpass:** overpass-api.de returned 406 for every station, then timeouts; mirrors (private.coffee, kumi.systems) returned 429/timeouts. Cause not confirmed. Added an identifying User-Agent to `attribution/http.py` (OSM etiquette; Nominatim already had one). Land use degrades gracefully (0 refreshed, 54 due). Suggest: mirror fallback list + POST queries + cache land use for 30 days (it barely changes).
 - Decisions 2026-11-05 in NEXT.md still apply (Pipecat phone, report board primary).
+
+## 2026-11-13 (local laptop): kaun-0.2, the cause engine
+
+Shaurya's ask: "pin point exactly what is causing the pollution, other than just cars; not location but the cause; autofill all forms; see progress; expand from Delhi to India."
+
+- **Root bug found on live data:** `SupabaseStore.select` paged with OFFSET and no ORDER BY, so Postgres returned heap-ordered pages that overlapped: 832 duplicate rows out of 5,832 wind rows loaded, ~15% missing. 34 of 86 spike windows therefore had no wind at all, which silently disabled the land-use and wind-signature terms and left `sector` null on 85% of cards. Fixed (order by the natural key), test added.
+- **Land-use v2** (`attribution/ingest/landuse.py`): more source types (works, kilns, crematoria, depots, highway construction), 2 km neighbourhood totals, named features with distance/bearing, Overpass mirrors tried in turn with POST (overpass-api.de 502s most of the day; z.overpass-api.de answers in ~25-45 s), `python -m attribution.ingest.landuse snapshot` writes `fixtures/landuse_delhi-ncr.json` and fills the store. Bawana check: industrial Sectors 1-4 at 0.9-2.4 km N/NE, Pragati-III gas plant 3.0 km NE, Ramky WtE 3.1 km NE.
+- **Fusion:** calm-air branch of the land-use term (neighbourhood vs fleet mean). **Regional profile** (`regional.regional_profile`): mechanism from city-mean wind (< 1.5 m/s) and mixing-height ratio (< 0.6) or upwind fires + carrying wind; composition from the fingerprint + humidity terms on the city-median excess. **Cause block** (`attribute.build_cause`) and new summaries. Routing via `agencies.routing_source` (local part >= 40%).
+- **Live result (12 Nov, 70 windows, before land-use v2 grids existed):** every window `stagnation` (wind 0.3-0.5 m/s, mixing height 50-95% of normal); cause tops: traffic 43, burning 25, dust 1, industry 1; e.g. Ashok Vihar "~65% region-wide: stagnant air trapped the city's own emissions (wind 0.5 m/s, mixing height 68% of normal); the shared air looks like traffic exhaust 63% + burning 37%; ~35% local: burning (calm air: close by)".
+- **Regions:** `regions.py`, `KAUN_REGION`, migration 005 (`attributions.cause`, `kaun_stations.region`, applied via the Management API), workflow input; only the Delhi run deploys Pages.
+- **Command center:** KAUN tab shows the cause block with candidate sites and map links; CPCB's form is dead so "fill" opens CPGRAMS / UP Jansunwai / Delhi PGMS; extension + userscript + bookmarklet v2 fill any portal form by field identity (one write per field, never captcha/OTP/password/file, nothing submitted), payload survives the login redirect for 2 h. Verified in Chromium on pgportal.gov.in/Registration.
+- 136 tests pass. PR #4 opened; `gh pr merge` is blocked by the local permission classifier, so Shaurya merges.
+
+**Honest limits added to docs/KAUN.md:** regional composition is a mix estimate; OSM candidates are places to look, not accusations; calm air gives no direction.
+
+**Not done / next:** Oct-Nov 2025 backfill (Step 4); Pipecat phone (Step 10); report board (Step 11); a second region needs its own 7-day baseline; the portals are login-gated so the extension cannot be tested past the registration page without Shaurya's account.

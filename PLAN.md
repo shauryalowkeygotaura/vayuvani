@@ -46,6 +46,8 @@ Unticked = needs live data, a human, or time (backtest numbers, DSS outputs, 7-d
 - [x] **Regional vs local split:** compare the station to the city-wide minimum / upwind stations; regional excess plus FIRMS fires upwind on a back-trajectory = transported smoke.
 - [x] **Factor analysis:** NMF/PMF on a rolling 30-day window per station to get source profiles; label factors with the fingerprint rules.
 - [x] **Output:** `attributions` table: station, window, source shares, sector, evidence, confidence (low/med/high). Never report a share without a confidence.
+- [x] **Cause, not just share (kaun-0.2, 2026-11-13):** every attribution carries a `cause` block: local part (source, sector or calm, up to three named OSM candidate sites) + region-wide part (why: stagnation / transport / plain rise, with city-mean wind and mixing-height ratio; what: composition of the shared air) + folded shares + English/Hindi sentence. Land-use inventory v2 (2 km neighbourhood for calm air, named features, Overpass mirrors, committed snapshot). Fixed: unordered Supabase pages dropped ~15% of wind rows.
+- [x] **Regions:** `attribution/regions.py` + `KAUN_REGION` (14 metros defined, Delhi default); stations carry a region; per-region feed paths; workflow `region` input. Turning on a city = one dispatch; needs 7 days of runs for a baseline.
 
 ### Phase 3: publish (`attribution/publish/`)
 - [x] Static JSON feed + a simple public page (GitHub Pages or Vercel, Node runtime, never edge) with a station map and the latest attributions.
