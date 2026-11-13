@@ -17,12 +17,12 @@ from typing import Optional
 from pipeline.fetcher import OPENAQ_BASE
 
 from .. import http
-from ..config import EXTRA_VARS, POLLUTANTS
+from ..config import EXTRA_VARS, POLLUTANTS, REGION
 from .units import station_slug, to_standard
 
 logger = logging.getLogger(__name__)
 
-SWEEP_CENTRES = ((28.7041, 77.1025), (28.5355, 77.3910))
+SWEEP_CENTRES = tuple(REGION["sweeps"])   # attribution/regions.py; Delhi = two 25 km sweeps
 RADIUS_M = 25000
 PACE_S = 1.05
 STALE_DAYS = 7

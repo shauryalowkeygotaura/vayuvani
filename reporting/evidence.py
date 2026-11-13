@@ -12,7 +12,7 @@ from typing import Optional
 
 from attribution.config import STATE_DIR
 from attribution.labels import LABELS_EN
-from .agencies import agencies_for
+from .agencies import agencies_for, routing_source
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -62,7 +62,14 @@ def build(rec: dict, root: Optional[str] = None) -> dict:
     shares = rec.get("shares") or {}
     if isinstance(shares, str):
         shares = json.loads(shares)
-    top = rec.get("top_source")
+    cause = rec.get("cause") or {}
+    if isinstance(cause, str):
+        try:
+            cause = json.loads(cause)
+        except ValueError:
+            cause = {}
+    top = routing_source(rec)
+    cands = ((cause.get("local") or {}).get("candidates") or []) if isinstance(cause, dict) else []
     d = os.path.join(root or STATE_DIR, "evidence", rec["id"])
     os.makedirs(d, exist_ok=True)
     with open(os.path.join(d, "chart.svg"), "w", encoding="utf-8") as f:
@@ -77,6 +84,11 @@ def build(rec: dict, root: Optional[str] = None) -> dict:
         f"excess {rec.get('excess_pm25')}",
         f"- Estimated sources: " + ", ".join(f"{LABELS_EN.get(k, k)} {v:.0%}" for k, v in shares.items()),
         f"- Confidence: **{rec['confidence']}**",
+        f"- Cause: {cause.get('text_en') or 'n/a'}" if isinstance(cause, dict) else "- Cause: n/a",
+        ("- Possible sites (OpenStreetMap, in the wind sector): " +
+         "; ".join(f"{c['name']} ({c['type']}, {c['km']} km {c['sector']}, "
+                   f"https://maps.google.com/?q={c.get('lat')},{c.get('lon')})" for c in cands)) if cands else
+        "- Possible sites: none named in OpenStreetMap for this sector",
         f"- Wind: {json.dumps(ev.get('wind'))}",
         f"- Ratios: {json.dumps(ev.get('ratios'))}",
         f"- Factor analysis (PM2.5 shares): {json.dumps(ev.get('nmf_pm25_shares'))}",

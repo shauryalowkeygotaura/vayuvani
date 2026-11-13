@@ -18,9 +18,9 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from . import http
+from . import http, regions
 from .checkpoint import Checkpoint
-from .config import DEFAULT_LOOKBACK_HOURS, MAX_BACKFILL_HOURS, NMF_WINDOW_DAYS, PUBLIC_DIR
+from .config import DEFAULT_LOOKBACK_HOURS, MAX_BACKFILL_HOURS, NMF_WINDOW_DAYS, PUBLIC_DIR, REGION
 from .store import LocalStore, get_store
 
 logger = logging.getLogger("kaun")
@@ -86,7 +86,7 @@ def ingest(store, ckpt: Checkpoint, since: datetime, until: datetime, archive: b
 
     store.upsert("kaun_stations", [
         {"id": s["id"], "name": s["name"], "latitude": s["latitude"], "longitude": s["longitude"],
-         "openaq_location_id": s.get("openaq_location_id"), "active": True}
+         "openaq_location_id": s.get("openaq_location_id"), "active": True, "region": REGION["id"]}
         for s in all_stations])
     obs = merge_sources(oa_rows, cp_rows)
     obs = [r for r in obs if since <= r["hour"] < until]
@@ -116,15 +116,31 @@ def _frame(rows: list[dict], col: str = "hour") -> pd.DataFrame:
 
 
 def load_stations(store) -> dict[str, dict]:
-    return {s["id"]: s for s in store.select("kaun_stations") if not str(s["id"]).startswith("_")}
+    """This region's stations. Rows without a region are legacy Delhi rows."""
+    out = {}
+    for s in store.select("kaun_stations"):
+        if str(s["id"]).startswith("_"):
+            continue
+        region = s.get("region") or regions.DEFAULT
+        if region == REGION["id"]:
+            out[s["id"]] = s
+    return out
+
+
+def _this_region(df: pd.DataFrame, stations: dict[str, dict]) -> pd.DataFrame:
+    """Keep only rows of this region's stations: one Supabase project can hold several airsheds."""
+    if df.empty or "station_id" not in df:
+        return df
+    return df.loc[df["station_id"].isin(set(stations))]
 
 
 def attribute(store, now: datetime, since: datetime) -> list[dict]:
     from .engine import attribute as engine
 
     start = (now - timedelta(days=NMF_WINDOW_DAYS + 1)).isoformat()
-    obs = _frame(store.select("hourly_obs", {"hour": f"gte.{start}"}))
-    wind = _frame(store.select("wind_obs", {"hour": f"gte.{start}"}))
+    stations = load_stations(store)
+    obs = _this_region(_frame(store.select("hourly_obs", {"hour": f"gte.{start}"})), stations)
+    wind = _this_region(_frame(store.select("wind_obs", {"hour": f"gte.{start}"})), stations)
     fires = store.select("fire_points", {"acq_time": f"gte.{(now - timedelta(days=3)).isoformat()}"})
     for f in fires:
         if "bearing_from_delhi" not in f or f["bearing_from_delhi"] is None:
@@ -132,7 +148,7 @@ def attribute(store, now: datetime, since: datetime) -> list[dict]:
             from .ingest.firms import bearing_deg
             f["bearing_from_delhi"] = bearing_deg(DELHI_LAT, DELHI_LON, float(f["latitude"]), float(f["longitude"]))
     from .ingest import landuse
-    recs = engine.run(obs, wind, fires, load_stations(store), since=pd.Timestamp(since),
+    recs = engine.run(obs, wind, fires, stations, since=pd.Timestamp(since),
                       landuse=landuse.load(store))
     store.upsert("attributions", recs)
     return recs

@@ -44,6 +44,49 @@ share is split off first (`regional.py`), and the posterior divides the local re
 | factors | NMF factor shares in the window | the factor's label |
 | local_fires | FIRMS points within 30 km upwind in the last 12 h | burning |
 
+In calm air (most Delhi smog hours: wind under 1 m/s, no usable sector) `upwind_landuse` switches to the
+station's own neighbourhood: the OSM inventory within 2 km, compared with the mean neighbourhood across all
+stations (`landuse.fleet_near_mean`). A station ringed by industrial sectors gets an industry prior; one with
+fewer arterial roads than typical loses traffic. Weaker than an upwind sector (x0.8) and labelled as such.
+
+### Cause decomposition (engine `kaun-0.2`, `attribute.build_cause`)
+
+Every record carries a `cause` block, which is what the cards and the phone line read:
+
+- **local**: the station's own excess (1 - regional share): the fused shares, the wind sector or "calm",
+  and up to three **named OSM candidates** (`landuse.candidates`): power plants, industrial areas, kilns,
+  landfills, construction sites, depots in the wind sector (or within 4 km when calm), nearest first.
+  Named only when the local part is at least 25% of the excess.
+- **regional**: how much of the rise the whole airshed shared, **why** (`regional.regional_profile`):
+  `transport` (fires upwind and wind that can carry them), `stagnation` (city-mean wind under 1.5 m/s or
+  mixing height under 60% of its same-hour norm: the lid under which the city's own emissions pile up),
+  else `regional_rise`; and **what it is made of**: the fingerprint and humidity terms applied to the
+  city-median excess of each species, so a smog day reads "trapped air, traffic-like + burning-like"
+  instead of "regional background".
+- **shares / top**: the two folded together (regional composition weighted by the regional share) and the
+  single biggest cause; `text_en` / `text_hi` is the sentence the card shows.
+
+Agency routing (`reporting.agencies.routing_source`) uses the local top only when the local part is at
+least 40% of the excess; a station that merely sits in region-wide smog is not reported to MCD.
+
+### Land-use inventory (`attribution/ingest/landuse.py`, version 2)
+
+One Overpass query per station (10 km): industrial land and works, power plants, brick kilns, landfills and
+waste transfer stations, crematoria, construction, quarries, rail yards, bus and truck depots, arterial
+roads. Reduced to a sector x distance grid, a 2 km neighbourhood total, and the named features themselves.
+Cached in `station_landuse` for 30 days and committed as `attribution/ingest/fixtures/landuse_<region>.json`
+(`python -m attribution.ingest.landuse snapshot`), so an hourly run never depends on Overpass being up.
+Several Overpass mirrors are tried in turn (the public ones 502 for much of the day).
+
+### Regions (`attribution/regions.py`)
+
+`KAUN_REGION` picks the airshed (default `delhi-ncr`; Mumbai, Kolkata, Bengaluru, Chennai, Hyderabad,
+Ahmedabad, Pune, Lucknow, Kanpur, Patna, Jaipur, Chandigarh, Varanasi are defined). It sets the OpenAQ
+sweep centres, the FIRMS box, the Overpass coordinate whitelist, the state directory and the feed path
+(`public/data/<region>/` for anything but Delhi). Stations carry their region in `kaun_stations.region`,
+so one Supabase project can hold several airsheds without mixing their backgrounds. Turning on a second
+city is one workflow run with the `region` input; its baseline needs 7 days of hourly runs like Delhi did.
+
 Wind comes from the station's own mast where OpenAQ has it (most CPCB/DPCC stations), otherwise from Open-Meteo.
 The weights (`fusion.W`) are engineering priors, not fitted values: there is no labelled ground truth for Delhi.
 Every attribution stores each term's contribution (`evidence.fusion.terms`), so you can audit why it chose a
@@ -93,6 +136,13 @@ The checkpoint lives in `.kaun_state/checkpoint.json`, carried between runs by `
   Industry rests on SO2 alone; dust on the fine fraction alone.
 - **Wind** is modelled at the station location, not the station mast (OpenAQ and data.gov.in do not expose WS/WD).
 - **Transport** uses a straight line along the 24 h mean wind, not HYSPLIT. It raises a flag; it does not prove transport.
+- **Regional composition** fingerprints the city-median excess against a pooled ratio history. On a stagnant
+  night it tends to read traffic-like plus burning-like, which matches Delhi's local inventory, but it is a
+  mix estimate, not a measurement; secondary aerosol is included only through humidity.
+- **Named candidates** are OpenStreetMap features in the wind sector. OSM is incomplete and sometimes stale,
+  so a candidate is a place to look, never an accusation. The card text says "likely", the agency text says
+  "possible sites".
+- **Calm air** gives no direction. The neighbourhood prior then only says what the station is surrounded by.
 - **NMF is not PMF:** no per-reading uncertainties exist for CPCB data. NMF only corroborates.
 - **Firecrackers** have no class; they show up as fine-mode combustion with SO2.
 - **CPCB via data.gov.in:** whether `pollutant_avg` is a concentration or a sub-index was not verified.

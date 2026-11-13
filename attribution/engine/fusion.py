@@ -39,13 +39,14 @@ SOURCES = ("traffic", "biomass_burning", "industry", "dust", "secondary")
 IST = timezone(timedelta(hours=5, minutes=30))
 
 LANDUSE_MAP = {  # feature -> {source: weight}
-    "roads": {"traffic": 1.0}, "rail": {"traffic": 0.3},
+    "roads": {"traffic": 1.0}, "rail": {"traffic": 0.3}, "depot": {"traffic": 0.7},
     "industrial": {"industry": 1.0}, "power": {"industry": 1.0},
     "kiln": {"industry": 0.5, "biomass_burning": 0.5},
-    "landfill": {"biomass_burning": 1.0},
+    "landfill": {"biomass_burning": 1.0}, "crematorium": {"biomass_burning": 0.4},
     "construction": {"dust": 1.0}, "quarry": {"dust": 0.7},
 }
 LANDUSE_PSEUDO = {"roads": 2.0}  # smoothing (km of road); other features: 0.5
+CALM_LANDUSE_SCALE = 0.8        # calm-air neighbourhood evidence is weaker than an upwind sector
 CBPF_MARKERS = {"traffic": ("no2", "no"), "industry": ("so2",), "dust": ("pm10",), "biomass_burning": ("co",)}
 W = {"T1": 1.5, "T2": 2.0, "T3": 1.5, "T4": 1.0, "T5": 0.8, "T6": 0.5, "T7": 1.5, "T8": 0.5}
 
@@ -101,11 +102,33 @@ def term_time_temp(hours, traffic_prior: float, temp: Optional[float]) -> dict:
     return out
 
 
-def term_landuse(grid: Optional[dict], wind: dict) -> dict:
+def term_landuse(grid: Optional[dict], wind: dict, fleet_near: Optional[dict] = None) -> dict:
+    """
+    Wind with a direction: inventory in the upwind sector vs the station's
+    other sectors. Calm air (the Delhi smog default): the station breathes its
+    own neighbourhood, so the inventory within 2 km is compared with the mean
+    neighbourhood across all stations (fleet_near, landuse.fleet_near_mean).
+    """
     sector = wind.get("sector")
-    if not grid or not sector or wind.get("calm"):
+    if not grid:
         return {}
-    out: dict[str, float] = {}
+    if not sector or wind.get("calm"):
+        near = grid.get("near") if isinstance(grid, dict) else None
+        if not isinstance(near, dict) or not fleet_near:
+            return {}
+        out: dict[str, float] = {}
+        for feat, here in near.items():
+            if feat not in LANDUSE_MAP or not _finite(here):
+                continue
+            ref = fleet_near.get(feat, 0.0)
+            a = LANDUSE_PSEUDO.get(feat, 0.5)
+            if here == 0 and ref == 0:
+                continue
+            enrich = _clip(math.log((here + a) / (ref + a)), -1.5, 1.5)
+            for src, w in LANDUSE_MAP[feat].items():
+                out[src] = out.get(src, 0.0) + W["T5"] * CALM_LANDUSE_SCALE * w * enrich
+        return out
+    out = {}
     for feat, sec in grid.items():
         if feat not in LANDUSE_MAP or not isinstance(sec, dict):
             continue

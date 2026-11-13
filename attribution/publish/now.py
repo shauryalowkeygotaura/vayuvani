@@ -22,7 +22,7 @@ import pandas as pd
 
 from pipeline.aqi_calc import calculate
 
-from ..config import PUBLIC_DIR
+from ..config import DATA_SUBDIR, PUBLIC_DIR
 
 WINDOWS = {"pm25": 24, "pm10": 24, "no2": 24, "so2": 24, "co": 8, "o3": 8}
 MIN_HOURS = {24: 16, 8: 6}
@@ -92,7 +92,7 @@ def build(obs: pd.DataFrame, stations: dict[str, dict], now: Optional[datetime] 
 
 
 def write(payload: dict, root: Optional[str] = None) -> str:
-    d = os.path.join(root or PUBLIC_DIR, "data")
+    d = os.path.join(root or PUBLIC_DIR, DATA_SUBDIR)
     os.makedirs(d, exist_ok=True)
     p = os.path.join(d, "now.json")
     tmp = p + ".tmp"

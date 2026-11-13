@@ -190,6 +190,40 @@ def test_http_sends_identifying_user_agent(monkeypatch):
     assert seen["X-API-Key"] == "k"
 
 
+def test_supabase_select_pages_in_key_order(monkeypatch):
+    """Offset pagination without ORDER BY drops and repeats rows (seen live: 15% of wind_obs)."""
+    from attribution.store import SupabaseStore
+    seen = []
+
+    class R:
+        status_code = 200
+        text = "[]"
+
+        def json(self):
+            return []
+
+    def fake_request(method, url, params=None, timeout=None, **kw):
+        seen.append(dict(params))
+        return R()
+
+    s = SupabaseStore(url="https://x.supabase.co", key="k")
+    monkeypatch.setattr(s.session, "request", fake_request)
+    s.select("wind_obs", {"hour": "gte.2026-11-01T00:00:00+00:00"})
+    assert seen[0]["order"] == "station_id,hour"
+    s.select("attributions", order="window_start.desc")
+    assert seen[1]["order"] == "window_start.desc"
+
+
+def test_regions_whitelist(monkeypatch):
+    from attribution import regions
+    monkeypatch.setenv("KAUN_REGION", "mumbai")
+    r = regions.current()
+    assert r["id"] == "mumbai" and regions.inside(r, 19.07, 72.88) and not regions.inside(r, 28.6, 77.2)
+    monkeypatch.setenv("KAUN_REGION", "../etc")
+    with pytest.raises(ValueError):
+        regions.current()
+
+
 def test_supabase_upsert_sends_uniform_keys_per_request():
     """PostgREST bulk insert rejects mixed key sets (PGRST102)."""
     import json as _json
@@ -202,7 +236,8 @@ def test_supabase_upsert_sends_uniform_keys_per_request():
         text = ""
 
     class FakeSession:
-        def post(self, url, params=None, headers=None, data=None, timeout=None):
+        def request(self, method, url, params=None, headers=None, data=None, timeout=None):
+            assert method == "POST"
             posts.append(_json.loads(data))
             return Resp()
 

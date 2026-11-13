@@ -112,6 +112,59 @@ def test_regional_share_and_upwind_fires():
     assert not regional.is_transported(0.5, calm)       # stagnant air cannot carry smoke 200 km
 
 
+def test_every_record_explains_its_cause(records):
+    for r in records:
+        c = r["cause"]
+        assert set(c) >= {"top", "shares", "local", "regional", "text_en", "text_hi"}
+        assert c["regional"]["mechanism"] in ("stagnation", "transport", "regional_rise", "unclear")
+        if c["shares"]:
+            assert sum(c["shares"].values()) == pytest.approx(1.0, abs=0.01)
+            assert c["top"] in c["shares"]
+        assert c["text_en"] and c["text_hi"]
+
+
+def test_build_cause_folds_regional_composition():
+    local = {"industry": 0.8, "traffic": 0.2}
+    prof = {"mechanism": "stagnation", "composition": {"biomass_burning": 0.7, "traffic": 0.3},
+            "wind_ms": 0.4, "pbl_ratio": 0.5, "stagnant": True, "upwind_fires": 0, "n_stations": 30}
+    wind = {"sector": "N", "calm": False}
+    c = attribute.build_cause(local, "industry", 0.5, False, prof, [{"name": "X", "type": "power plant", "km": 2.0, "sector": "N"}], wind)
+    assert c["shares"]["industry"] == pytest.approx(0.4, abs=0.01)
+    assert c["shares"]["biomass_burning"] == pytest.approx(0.35, abs=0.01)
+    assert c["top"] == "industry" and c["local"]["top"] == "industry" and c["local"]["candidates"]
+    assert c["regional"]["mechanism"] == "stagnation"
+    en, hi = attribute._cause_text(c)
+    assert "stagnant" in en and "X (power plant, 2 km)" in en and "ठहरी" in hi
+    # Mostly regional, transported: the regional part is smoke, nothing local to name.
+    c2 = attribute.build_cause(local, "industry", 0.9, True, dict(prof, mechanism="transport", upwind_fires=40), [], wind)
+    assert c2["top"] == "transported_smoke" and c2["local"]["top"] is None and c2["local"]["candidates"] == []
+    assert "fires upwind" in attribute._cause_text(c2)[0]
+    # No regional part at all.
+    c3 = attribute.build_cause(local, "industry", None, False, {"mechanism": "unclear", "composition": {}}, [], wind)
+    assert c3["shares"] == {"industry": 0.8, "traffic": 0.2} and c3["regional"]["share"] == 0
+
+
+def test_regional_profile_reads_stagnation():
+    obs, wind = synthetic.generate(days=10)
+    data = attribute.merge_obs(obs, wind)
+    flagged = spikes.detect(data)
+    last = flagged["hour"].max()
+    hours = [last - pd.Timedelta(hours=1), last]
+    calm = flagged.copy()
+    calm.loc[calm["hour"].isin(hours), "wind_speed"] = 0.3
+    calm.loc[calm["hour"].isin(hours), "pbl_height"] = 50.0
+    calm.loc[~calm["hour"].isin(hours), "pbl_height"] = 800.0
+    p = regional.regional_profile(calm, hours, hours[0], {"count": 0}, False)
+    assert p["n_stations"] == len(synthetic.STATIONS)
+    assert p["mechanism"] == "stagnation" and p["stagnant"] is True
+    assert p["wind_ms"] == pytest.approx(0.3) and p["pbl_ratio"] < 0.2
+    assert isinstance(p["composition"], dict)
+    windy = regional.regional_profile(flagged, hours, hours[0], {"count": 30}, True)
+    assert windy["mechanism"] == "transport"
+    few = regional.regional_profile(flagged.loc[flagged["station_id"] == "mundka-delhi-dpcc"], hours, hours[0], {}, False)
+    assert few["mechanism"] == "unclear" and few["composition"] == {}
+
+
 def test_nmf_deterministic():
     obs, _ = synthetic.generate(days=10)
     st = obs.loc[obs["station_id"] == "r-k-puram-delhi-dpcc"]

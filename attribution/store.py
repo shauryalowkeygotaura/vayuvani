@@ -19,6 +19,7 @@ Tables (see supabase/migrations/002_kaun.sql):
 import json
 import logging
 import os
+import time
 from datetime import datetime
 from typing import Iterable, Optional
 
@@ -96,6 +97,24 @@ class SupabaseStore:
             "Content-Type": "application/json",
         })
 
+    def _send(self, method: str, what: str, **kwargs) -> requests.Response:
+        """One request with a short retry on dropped connections (seen as WinError 10054 mid-batch)."""
+        last: Optional[Exception] = None
+        for attempt in range(3):
+            try:
+                resp = self.session.request(method, timeout=30, **kwargs)
+            except requests.RequestException as e:
+                last = e
+                logger.warning(f"Supabase {what}: network error (attempt {attempt + 1}): {e}")
+                time.sleep(2 ** attempt)
+                continue
+            if 500 <= resp.status_code < 600 and attempt < 2:
+                logger.warning(f"Supabase {what}: {resp.status_code} (attempt {attempt + 1})")
+                time.sleep(2 ** attempt)
+                continue
+            return resp
+        raise BadResponse(f"Supabase {what}: unreachable after 3 attempts: {last}")
+
     def _raise_for(self, resp: requests.Response, what: str) -> None:
         code = resp.status_code
         if code in (401, 403):
@@ -119,12 +138,12 @@ class SupabaseStore:
             groups.setdefault(frozenset(r), []).append(r)
         n = 0
         for part in (g[i:i + chunk] for g in groups.values() for i in range(0, len(g), chunk)):
-            resp = self.session.post(
-                f"{self.url}/rest/v1/{table}",
+            resp = self._send(
+                "POST", f"upsert {table}",
+                url=f"{self.url}/rest/v1/{table}",
                 params={"on_conflict": on_conflict},
                 headers={"Prefer": "resolution=merge-duplicates,return=minimal"},
                 data=json.dumps(part, allow_nan=False, default=str),
-                timeout=30,
             )
             self._raise_for(resp, f"upsert {table}")
             n += len(part)
@@ -136,15 +155,19 @@ class SupabaseStore:
         _check_table(table)
         out: list[dict] = []
         offset = 0
+        # Offset pagination is only stable under a total order. Without one,
+        # Postgres hands back pages in heap order and rows drift between pages:
+        # on the live project that silently dropped ~15% of wind_obs rows, so a
+        # third of spike windows lost their wind (and every map/wind term).
+        order = order or ",".join(TABLE_KEYS[table])
         while True:
             params = dict(filters or {})
             params["select"] = "*"
-            if order:
-                params["order"] = order
+            params["order"] = order
             page = PAGE if limit is None else min(PAGE, limit - len(out))
             params["limit"] = page
             params["offset"] = offset
-            resp = self.session.get(f"{self.url}/rest/v1/{table}", params=params, timeout=30)
+            resp = self._send("GET", f"select {table}", url=f"{self.url}/rest/v1/{table}", params=params)
             self._raise_for(resp, f"select {table}")
             try:
                 batch = resp.json()
@@ -160,10 +183,11 @@ class SupabaseStore:
     def update(self, table: str, match: dict, values: dict) -> None:
         _check_table(table)
         params = {k: f"eq.{v}" for k, v in match.items()}
-        resp = self.session.patch(
-            f"{self.url}/rest/v1/{table}", params=params,
+        resp = self._send(
+            "PATCH", f"update {table}",
+            url=f"{self.url}/rest/v1/{table}", params=params,
             headers={"Prefer": "return=minimal"},
-            data=json.dumps(clean_rows([values])[0]), timeout=30,
+            data=json.dumps(clean_rows([values])[0]),
         )
         self._raise_for(resp, f"update {table}")
 

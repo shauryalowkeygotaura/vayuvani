@@ -26,9 +26,32 @@ FALLBACK = "CPCB"
 HERE = os.path.dirname(__file__)
 
 
+MIN_LOCAL_SHARE_TO_ROUTE = 0.4
+
+
 def agencies_for(source: Optional[str]) -> tuple[str, ...]:
     a = PRIMARY_AGENCY.get(source or "")
     return (a,) if a else ()
+
+
+def routing_source(rec: dict) -> Optional[str]:
+    """
+    The source an agency can act on. Engine kaun-0.2 splits every spike into a
+    local part (with a named sector and OSM candidates) and a region-wide part
+    (stagnation, transport). Only the local part has an owner: use its top
+    source when it carries at least MIN_LOCAL_SHARE_TO_ROUTE of the excess,
+    else fall back to the overall top_source (older records have no cause).
+    """
+    cause = rec.get("cause")
+    if isinstance(cause, str):
+        try:
+            cause = json.loads(cause)
+        except ValueError:
+            cause = None
+    loc = (cause or {}).get("local") if isinstance(cause, dict) else None
+    if isinstance(loc, dict) and loc.get("top") and (loc.get("share") or 0) >= MIN_LOCAL_SHARE_TO_ROUTE:
+        return loc["top"]
+    return rec.get("top_source")
 
 
 def load_contacts(path: Optional[str] = None) -> dict:
