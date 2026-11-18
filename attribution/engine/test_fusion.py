@@ -126,6 +126,7 @@ def test_landuse_refresh_caches(tmp_path, monkeypatch):
     monkeypatch.setattr(landuse, "fetch_station",
                         lambda lat, lon: calls.append(1) or {"roads": {"N": 1.0}, "version": landuse.VERSION})
     monkeypatch.setattr(landuse.time, "sleep", lambda x: None)
+    monkeypatch.setattr(landuse, "FIXTURES", str(tmp_path))   # ignore the committed Delhi snapshot
     st = [{"id": f"s{i}", "latitude": 28.6, "longitude": 77.2} for i in range(3)]
     assert landuse.refresh(s, st, per_run=2) == 2
     assert landuse.refresh(s, st, per_run=2) == 1
