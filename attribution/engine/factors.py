@@ -47,14 +47,22 @@ def _label(profile: dict[str, float], means: dict[str, float]) -> str:
     if o3_rel is not None and o3_rel > 3 and profile.get("pm25", 0) < 0.2 * pm_total:
         return "secondary"
     fine = profile.get("pm25", 0) / profile["pm10"] if profile.get("pm10") else None
+    # Station-relative fine fraction: post-monsoon Delhi air is fine-dominated
+    # everywhere, so an absolute cut-off (the old fine >= 0.55) labelled almost
+    # every factor "burning" (blind test 2026-11-18: 131 of 161 windows).
+    mean_fine = means["pm25"] / means["pm10"] if means.get("pm10") and means.get("pm25") else None
+    fine_rel = fine / mean_fine if fine is not None and mean_fine else None
     so2_rel, no2_rel, co_rel = rel("so2"), rel("no2"), rel("co")
     if so2_rel is not None and so2_rel > 2.0:
         return "industry"
-    if fine is not None and fine < 0.4:
+    if fine is not None and (fine < 0.4 or (fine_rel is not None and fine_rel < 0.8)):
         return "dust"
     if (no2_rel or 0) > 1.5 and (co_rel or 1) > 1.0:
         return "traffic"
-    if fine is not None and fine >= 0.55:
+    # Burning: finer than this station's usual mix, carrying CO, without the
+    # NO2 that marks exhaust.
+    if (fine_rel is not None and fine_rel >= 1.05 and (co_rel is None or co_rel >= 1.0)
+            and (no2_rel is None or no2_rel < 1.2)):
         return "biomass_burning"
     return "mixed"
 

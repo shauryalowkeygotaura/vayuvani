@@ -114,3 +114,57 @@ Rules for this run:
 - Forms: CPCB's web form is dead on CPCB's side. The command center fills CPGRAMS / UP Jansunwai / Delhi PGMS via the Kaun extension. Nothing is ever submitted automatically.
 - Expansion: one region per workflow dispatch (`region` input). Before enabling a second city, move the feed to per-region branches so Pages can hold more than Delhi (the deploy job only runs for Delhi today).
 - Next for the cause engine: (1) a per-source "what to look for" line for inspectors; (2) weight the regional composition by station coverage; (3) a 24 h city-wide "why is today bad" summary on the public page from the same regional profile.
+
+## Step 12 (2026-11-18, Shaurya: "at least 95% success, do whatever, more data, more features")
+
+**The target, defined so it can be measured.** "95%" = precision of the source Kaun *publishes*: of the
+spikes where a card names a local source, at least 95% are right against a labelled set, with the
+lower end of the 95% confidence interval reported next to it. Kaun says "source unclear" for everything
+else. Coverage (how many spikes get a named source) is reported too and pushed up over time. 95% on
+*every* spike from station data is not physically possible (3+ sources mix in one air parcel); 95% on
+the calls it chooses to make is, once labels exist. Never publish a success rate without the labelled
+set behind it.
+
+Baseline (blind test 18 Nov, `attribution/validation/BLIND_REPORT.md`): local source calls agree with no
+independent witness, neighbouring stations agree 34% (= chance). Start from here; re-run the blind test
+after every change and append the table to the report.
+
+### 12a. Build the answer key (nothing else can be measured without it)
+- [ ] `attribution/validation/labels.py` + table `spike_labels` (attribution_id, label, source of label, evidence url, labeller). Label sources, strongest first:
+  1. Field photos: timestamped, geotagged photo of the source at or near a named site (public report board, Step 11, + phone line). Shaurya / callers.
+  2. FIRMS fire within 2 km upwind of the station in the spike hours -> burning (positive label only).
+  3. Natural experiments with official dates (verify each date on CAQM / DPCC orders): GRAP stage III/IV (construction ban -> dust share must drop; BS-III petrol / BS-IV diesel ban, truck entry ban -> traffic share must drop), Diwali night 2025 (20 Oct 2025, firecrackers: metals/SO2 + fine, not traffic), Sundays (traffic lower). These test shares at population level, not single spikes.
+  4. Injected synthetic signatures on top of REAL station series (not the toy generator): necessary, not sufficient.
+- [ ] Target size: >= 100 labelled spikes per source class for a +-4% interval.
+
+### 12b. More data (each one a new, independent signal)
+- [ ] CPCB CCR full parameter set per station: benzene, toluene, xylene (BTX; toluene/benzene ratio separates exhaust ~1.5-3 from burning <1), NH3 (burning, agriculture), PM1, NO, NOx. OpenAQ carries only part of this: check `CPCB_API_KEY` (in Doppler, NOT yet a GitHub secret, so CI skips CPCB) and the CCR / data.gov.in resources for BTX and NH3 per station.
+- [ ] Sentinel-5P TROPOMI daily NO2, CO, HCHO (Copernicus, free account): city-scale witness and an upwind/downwind gradient.
+- [ ] Low-cost sensor networks on OpenAQ (isMonitor=false, currently dropped) as extra spatial density, down-weighted.
+- [ ] VIIRS night lights / OSM building permits for construction activity; Delhi traffic speed (TomTom/HERE free tier) for a real congestion signal instead of the clock prior.
+
+### 12c. Better method
+- [ ] **Use the network, not one station.** For each spike, fit which OSM source (or source class at a location) best explains the pattern of excesses across ALL stations given the wind field: a Gaussian-plume / footprint inversion over the land-use inventory. A real source lights up the downwind stations in order; a single-station ratio cannot see that. This is the biggest expected gain.
+- [ ] Hour-of-week baseline (weekday vs Sunday) instead of same-hour.
+- [ ] Learn the fusion weights from the labelled set (logistic regression over the term contributions) instead of hand priors; calibrate probabilities (isotonic) on held-out labels.
+- [ ] **Abstain:** publish a local source only when calibrated P(source) >= the threshold that gives >= 95% precision on held-out labels; else "unclear". Cards and phone line show "unclear" honestly.
+- [ ] Until 12a has labels: cards tag the local source "unverified" and lead with the measured parts (spike, local vs region-wide split, stagnation numbers, named sites).
+
+### Done when
+- Blind test passes the twins check and at least 3 of the witness checks (p < 0.05).
+- Precision of published calls >= 95% on >= 100 held-out labels per class, interval reported, coverage reported.
+
+### 12d. External answer key: test the method where sources are measured (do this first, 2026-11-18)
+Shaurya is chasing Delhi's own answer key (Gani email + DPCC RTI, `docs/outreach/answer_key_requests.md`).
+Meanwhile prove or kill the method on data where hourly sources are measured:
+- [ ] Find an open dataset with hourly measured source shares AND co-located hourly PM2.5, PM10, NO2, CO, SO2
+  (and ideally several stations within a city): candidates to check, in order: ACTRIS / EBAS aethalometer
+  black carbon split into wood burning vs fossil (BCwb / BCff); ClearfLo 2012 London (North Kensington,
+  Marylebone Road) data archive; Paris SIRTA ACSM organic-aerosol PMF (HOA = traffic, BBOA = burning);
+  US EPA AQS hourly gases next to speciation sites. Write what is actually downloadable, with URLs.
+- [ ] `attribution/validation/external.py`: load it into the same hourly_obs shape, run the engine with
+  `chemistry_only()` (blind.py), score burning vs traffic calls against the measured split: precision,
+  recall, and the calibration curve of the fusion posterior.
+- [ ] Use it to improve the method (term weights by logistic regression, abstention threshold for 95%
+  precision), then re-run the Delhi blind test. Report both numbers. A London result is evidence the
+  method works, not a Delhi accuracy number: never quote it as one.
