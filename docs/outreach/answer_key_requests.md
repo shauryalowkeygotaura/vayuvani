@@ -82,6 +82,9 @@ Under the Right to Information Act, 2005, please provide:
    recorded in DPCC's files.
 5. Copies of all project reports submitted by the IIT Kanpur-led consortium after the September 2023
    winter report.
+6. Hourly benzene, toluene, xylene (BTX) and ammonia (NH3) readings for every Continuous Ambient Air
+   Quality Monitoring Station operated by DPCC in Delhi, from 1 October 2025 to the date of reply, in
+   machine-readable form (CSV or Excel).
 
 I am a citizen of India. Please provide the information in electronic form by email to
 [your email].
