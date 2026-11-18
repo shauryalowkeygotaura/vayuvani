@@ -142,6 +142,15 @@ The checkpoint lives in `.kaun_state/checkpoint.json`, carried between runs by `
 - **Named candidates** are OpenStreetMap features in the wind sector. OSM is incomplete and sometimes stale,
   so a candidate is a place to look, never an accusation. The card text says "likely", the agency text says
   "possible sites".
+- **Blind test, 18 Nov 2026 (`python -m attribution.validation.blind`): the local source label is not
+  validated.** With the map, clock and fire terms switched off, station chemistry's calls (burning /
+  traffic / industry / dust) did not line up with satellite fires, the clock, the map, or even with a
+  neighbouring station under 3 km away spiking in the same hours (agreement 34% vs 37-40% for distant
+  pairs). Read the local source on a card as a hypothesis. What is measured, not inferred: the spike
+  itself, the local vs region-wide split, the stagnation numbers (wind, mixing height), and the named
+  sites (map facts). The test also found the factor analysis labelling almost every factor "burning"
+  (absolute fine-fraction cut-off); fixed to station-relative, which spread the calls but did not make
+  the checks pass.
 - **Calm air** gives no direction. The neighbourhood prior then only says what the station is surrounded by.
 - **NMF is not PMF:** no per-reading uncertainties exist for CPCB data. NMF only corroborates.
 - **Firecrackers** have no class; they show up as fine-mode combustion with SO2.
