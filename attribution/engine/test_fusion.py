@@ -57,6 +57,36 @@ def test_landuse_upwind_enrichment():
     assert fusion.term_landuse(grid, {"sector": None, "calm": True}) == {}
 
 
+def test_landuse_calm_uses_neighbourhood_vs_fleet():
+    grid = {f: {s: 0.0 for s in ("N", "NE", "E", "SE", "S", "SW", "W", "NW")} for f in landuse.FEATURES}
+    grid["near"] = {f: 0.0 for f in landuse.FEATURES}
+    grid["near"]["industrial"] = 4.0            # Bawana-like: industry all around
+    fleet = {f: 0.0 for f in landuse.FEATURES}
+    fleet["industrial"] = 0.5
+    fleet["roads"] = 20.0
+    calm = {"sector": None, "calm": True}
+    t = fusion.term_landuse(grid, calm, fleet)
+    assert t["industry"] > 0 and t["traffic"] < 0   # fewer arterial roads than typical
+    assert fusion.term_landuse(grid, calm) == {}       # no fleet reference: no claim
+    assert fusion.term_landuse({"roads": {"N": 1.0}}, calm, fleet) == {}   # v1 grid has no neighbourhood
+
+
+def test_named_candidates_follow_the_wind():
+    grid = {"features": [
+        {"name": "Sector 3", "feature": "industrial", "km": 0.9, "sector": "N"},
+        {"name": "Pragati-III", "feature": "power", "km": 3.0, "sector": "NE"},
+        {"name": "Ghazipur landfill", "feature": "landfill", "km": 6.0, "sector": "E"},
+        {"name": "Far works", "feature": "industrial", "km": 9.0, "sector": "SW"},
+    ]}
+    ne = landuse.candidates(grid, "industry", {"sector": "NE", "calm": False})
+    assert [c["name"] for c in ne] == ["Pragati-III", "Sector 3"]        # sector first, then neighbours
+    calm = landuse.candidates(grid, "industry", {"sector": None, "calm": True})
+    assert [c["name"] for c in calm] == ["Sector 3", "Pragati-III"]      # within 4 km, nearest first
+    assert landuse.candidates(grid, "biomass_burning", {"sector": "E", "calm": False})[0]["type"] == "landfill / waste site"
+    assert landuse.candidates(grid, "secondary", {"sector": "E"}) == []
+    assert landuse.candidates(None, "industry", {"sector": "E"}) == []
+
+
 def test_cbpf_marker_signature():
     cb = {"so2": {"N": 0.1, "NE": 0.1, "E": 0.7, "SE": 0.1, "S": 0.1, "SW": 0.1, "W": 0.1, "NW": 0.1}}
     assert fusion.term_cbpf(cb, {"sector": "E"})["industry"] > 0
@@ -93,7 +123,8 @@ def test_landuse_refresh_caches(tmp_path, monkeypatch):
     from attribution.store import LocalStore
     s = LocalStore(str(tmp_path))
     calls = []
-    monkeypatch.setattr(landuse, "fetch_station", lambda lat, lon: calls.append(1) or {"roads": {"N": 1.0}})
+    monkeypatch.setattr(landuse, "fetch_station",
+                        lambda lat, lon: calls.append(1) or {"roads": {"N": 1.0}, "version": landuse.VERSION})
     monkeypatch.setattr(landuse.time, "sleep", lambda x: None)
     st = [{"id": f"s{i}", "latitude": 28.6, "longitude": 77.2} for i in range(3)]
     assert landuse.refresh(s, st, per_run=2) == 2

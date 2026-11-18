@@ -88,6 +88,75 @@ def upwind_fires(fires: list[dict], wind: pd.DataFrame, at: pd.Timestamp) -> dic
 
 MIN_TRANSPORT_WIND_MS = 2.0
 MIN_TRANSPORT_STEADINESS = 0.5
+STAGNANT_WIND_MS = 1.5      # city-mean wind below this cannot ventilate the airshed
+STAGNANT_PBL_RATIO = 0.6    # mixing height below 60% of its same-hour norm: emissions trapped
+
+
+def regional_profile(flagged: pd.DataFrame, hours, start: pd.Timestamp, fires_up: dict,
+                     transported: bool, history_days: int = 30) -> dict:
+    """
+    What the REGIONAL part of a spike is made of, and why it happened.
+
+    The regional share says how much of a station's rise the whole airshed
+    shared; this says what that shared rise looks like. Composition: the ratio
+    fingerprint (fingerprints.score) applied to the city-median excess of each
+    species over the window, against a pooled 30-day ratio history, so the
+    result reads "the trapped air is burning-like" or "traffic-like".
+    Mechanism: transport (fires upwind, wind that can carry them), stagnation
+    (city-mean wind < STAGNANT_WIND_MS or mixing height < STAGNANT_PBL_RATIO
+    of its same-hour norm), else a plain regional rise. Stagnation does not
+    emit anything: it is the lid under which the city's own emissions pile up,
+    which is why composition still matters.
+    """
+    from . import fingerprints
+    from ..config import DELTA_VARS, EXTRA_VARS, POLLUTANTS
+    from ..ingest import traffic
+
+    hours = pd.DatetimeIndex(hours)
+    rows = flagged.loc[flagged["hour"].isin(hours)]
+    n_st = int(rows["station_id"].nunique()) if not rows.empty else 0
+    out: dict = {"n_stations": n_st, "mechanism": "unclear", "composition": {}, "ratios": {},
+                 "wind_ms": None, "pbl_ratio": None, "stagnant": None, "transported": bool(transported),
+                 "upwind_fires": int(fires_up.get("count", 0) or 0)}
+    if n_st < MIN_STATIONS_FOR_REGIONAL:
+        return out
+
+    def med(col):
+        if col not in rows:
+            return None
+        s = rows[col].astype(float).dropna()
+        return None if s.size < MIN_STATIONS_FOR_REGIONAL else float(s.median())
+
+    d = {p: med(f"delta_{p}") for p in DELTA_VARS}
+    totals = {p: med(p) for p in POLLUTANTS + EXTRA_VARS}
+    hist = flagged.loc[(flagged["hour"] < start) & (flagged["hour"] >= start - pd.Timedelta(days=history_days))]
+    tprior = float(np.mean([traffic.prior(h.to_pydatetime()) for h in hours]))
+    fp = fingerprints.score(d, totals, fingerprints.station_ratio_history(hist), tprior)
+    # Same evidence pool as a station (ratios, humidity, hour and temperature) so
+    # "secondary" can show up: humid stagnant nights grow particles from gases,
+    # and that part has no chimney to point at.
+    from . import fusion
+    fused = fusion.fuse({
+        "fingerprint": fusion.term_fingerprint(fp["scores"]),
+        "secondary_rh": fusion.term_secondary(fp["ratios"], totals.get("rh")),
+        "time_temp": fusion.term_time_temp(list(hours), tprior, totals.get("temp")),
+    })
+    out["composition"] = fused["shares"]
+    out["ratios"] = fp["ratios"]
+
+    wind_ms = med("wind_speed")
+    out["wind_ms"] = None if wind_ms is None else round(wind_ms, 2)
+    pbl_now = med("pbl_height")
+    if pbl_now is not None and "pbl_height" in hist:
+        ref = hist.loc[hist["hour"].dt.hour.isin(hours.hour.unique())
+                       & (hist["hour"] >= start - pd.Timedelta(days=7)), "pbl_height"].dropna()
+        if ref.size >= 3 and ref.median() > 0:
+            out["pbl_ratio"] = round(float(pbl_now / ref.median()), 2)
+    stagnant = ((wind_ms is not None and wind_ms < STAGNANT_WIND_MS)
+                or (out["pbl_ratio"] is not None and out["pbl_ratio"] < STAGNANT_PBL_RATIO))
+    out["stagnant"] = bool(stagnant) if (wind_ms is not None or out["pbl_ratio"] is not None) else None
+    out["mechanism"] = "transport" if transported else "stagnation" if stagnant else "regional_rise"
+    return out
 
 
 def is_transported(reg_share: Optional[float], fires: dict) -> bool:

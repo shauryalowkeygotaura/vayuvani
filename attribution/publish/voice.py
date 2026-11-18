@@ -13,7 +13,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from ..config import PUBLIC_DIR
+from ..config import DATA_SUBDIR, PUBLIC_DIR
 from ..labels import CONF_HI, LABELS_EN, LABELS_HI, SECTORS_EN, SECTORS_HI
 
 MAX_AGE_HOURS = 12
@@ -27,7 +27,7 @@ def _km(lat1, lon1, lat2, lon2) -> float:
 
 
 def load_latest(path: Optional[str] = None) -> list[dict]:
-    p = path or os.path.join(PUBLIC_DIR, "data", "latest.json")
+    p = path or os.path.join(PUBLIC_DIR, DATA_SUBDIR, "latest.json")
     try:
         with open(p, encoding="utf-8") as f:
             return (json.load(f) or {}).get("attributions", [])

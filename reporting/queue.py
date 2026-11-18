@@ -23,7 +23,7 @@ from attribution.config import REPO_SLUG
 from attribution.store import get_store
 
 from . import evidence
-from .agencies import NOT_ROUTABLE, agencies_for
+from .agencies import NOT_ROUTABLE, agencies_for, routing_source
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ APPROVER_RE = re.compile(r"^[A-Za-z][A-Za-z .'-]{1,60}$")
 
 
 def eligible(rec: dict) -> bool:
-    top = rec.get("top_source")
+    top = routing_source(rec)
     return (rec.get("confidence") == "high" and top not in NOT_ROUTABLE
             and bool(agencies_for(top)) and not rec.get("synthetic"))
 
@@ -50,12 +50,13 @@ def enqueue(records: list[dict], store=None, root=None) -> list[dict]:
         if not eligible(rec) or rec["id"] in seen:
             continue
         pack = evidence.build(rec, root=root)
+        src = routing_source(rec)
         rows.append({
             "attribution_id": rec["id"],
             "kind": "spike",
             "station_id": rec["station_id"],
-            "agencies": list(agencies_for(rec["top_source"])),
-            "top_source": rec["top_source"],
+            "agencies": list(agencies_for(src)),
+            "top_source": src,
             "confidence": rec["confidence"],
             "latitude": rec.get("latitude"),
             "longitude": rec.get("longitude"),

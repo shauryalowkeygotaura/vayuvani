@@ -106,3 +106,11 @@ Rules for this run:
 - [ ] Data from `public/data/reports.json`, written by the hourly run. Caller numbers stay hashed; never publish raw phone numbers or free-text that could identify a caller.
 - [ ] Share-friendly: each card has a permalink and an OG image so it can be posted on X/WhatsApp by Shaurya (posting stays manual).
 - [ ] Email digest code stays but is opt-in; the board must work with zero secrets.
+
+## Decisions 2026-11-13 (Shaurya): the cause, not the share
+
+- "Pin point exactly what is causing the pollution, not location but the cause": engine kaun-0.2 ships a `cause` block per attribution (see `docs/KAUN.md`, "Cause decomposition"). Keep improving the cause, never regress to a bare share.
+- Land use is now real data (`attribution/ingest/fixtures/landuse_delhi-ncr.json`). Refresh with `python -m attribution.ingest.landuse snapshot` when stations change; never let the hourly job depend on Overpass.
+- Forms: CPCB's web form is dead on CPCB's side. The command center fills CPGRAMS / UP Jansunwai / Delhi PGMS via the Kaun extension. Nothing is ever submitted automatically.
+- Expansion: one region per workflow dispatch (`region` input). Before enabling a second city, move the feed to per-region branches so Pages can hold more than Delhi (the deploy job only runs for Delhi today).
+- Next for the cause engine: (1) a per-source "what to look for" line for inspectors; (2) weight the regional composition by station coverage; (3) a 24 h city-wide "why is today bad" summary on the public page from the same regional profile.

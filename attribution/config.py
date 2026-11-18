@@ -5,18 +5,24 @@ Everything tunable lives here so the engine stays deterministic and auditable:
 a reviewer can read one file and see every threshold the attributions depend on.
 """
 
+import math
 import os
 
-# Delhi centre (India Gate area) and the FIRMS search box.
-DELHI_LAT = 28.6139
-DELHI_LON = 77.2090
+from . import regions
+
+# Region (KAUN_REGION, default delhi-ncr). The names keep "DELHI" because the
+# rest of the code grew up there; they now mean "the current region's centre".
+REGION = regions.current()
+DELHI_LAT = REGION["lat"]
+DELHI_LON = REGION["lon"]
 FIRE_RADIUS_KM = 300.0
-# ~300 km box: 1 deg lat = 111 km, 1 deg lon at 28.6N = ~97.5 km.
+# ~300 km box: 1 deg lat = 111 km, 1 deg lon = 111 km * cos(lat).
+_KM_PER_DEG_LON = 111.0 * math.cos(math.radians(DELHI_LAT))
 FIRMS_BBOX = (
-    round(DELHI_LON - FIRE_RADIUS_KM / 97.5, 2),   # west
-    round(DELHI_LAT - FIRE_RADIUS_KM / 111.0, 2),  # south
-    round(DELHI_LON + FIRE_RADIUS_KM / 97.5, 2),   # east
-    round(DELHI_LAT + FIRE_RADIUS_KM / 111.0, 2),  # north
+    round(DELHI_LON - FIRE_RADIUS_KM / _KM_PER_DEG_LON, 2),   # west
+    round(DELHI_LAT - FIRE_RADIUS_KM / 111.0, 2),             # south
+    round(DELHI_LON + FIRE_RADIUS_KM / _KM_PER_DEG_LON, 2),   # east
+    round(DELHI_LAT + FIRE_RADIUS_KM / 111.0, 2),             # north
 )
 FIRMS_SOURCES = ("VIIRS_SNPP_NRT", "VIIRS_NOAA20_NRT", "VIIRS_NOAA21_NRT", "MODIS_NRT")
 FIRMS_DAY_RANGE = 2
@@ -54,7 +60,11 @@ REGIONAL_PERCENTILE = 10   # city-wide background = this percentile across stati
 MIN_STATIONS_FOR_REGIONAL = 5
 UPWIND_HALF_ANGLE_DEG = 30.0
 
-# Paths.
-STATE_DIR = os.getenv("KAUN_STATE_DIR", ".kaun_state")
+# Paths. The default region keeps the original paths (the public feed URLs are
+# already linked from the command center); other regions get a suffix.
+_SUFFIX = "" if REGION["id"] == regions.DEFAULT else f"-{REGION['id']}"
+STATE_DIR = os.getenv("KAUN_STATE_DIR", f".kaun_state{_SUFFIX}")
 PUBLIC_DIR = os.getenv("KAUN_PUBLIC_DIR", "public")
+# Feed subdirectory under public/: "data" for Delhi, "data/<region>" elsewhere.
+DATA_SUBDIR = "data" if REGION["id"] == regions.DEFAULT else os.path.join("data", REGION["id"])
 REPO_SLUG = os.getenv("GITHUB_REPOSITORY", "shauryalowkeygotaura/vayuvani")

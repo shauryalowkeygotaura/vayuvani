@@ -4,10 +4,22 @@ on:
   schedule:
     - cron: "17 * * * *"   # hourly at :17 (off the :00 rush; CPCB hours land by then)
   workflow_dispatch:
+    inputs:
+      region:
+        description: "Airshed (attribution/regions.py id). Delhi NCR is the default and the cron."
+        default: delhi-ncr
+        type: choice
+        options: [delhi-ncr, mumbai, kolkata, bengaluru, chennai, hyderabad, ahmedabad, pune, lucknow, kanpur, patna, jaipur, chandigarh, varanasi]
 
+# One group for every region: runs share the checkout, the Pages artifact and
+# the runner's state directory, so they must not overlap.
 concurrency:
   group: kaun-hourly
   cancel-in-progress: false
+
+env:
+  KAUN_REGION: ${{ inputs.region || 'delhi-ncr' }}
+  KAUN_STATE_DIR: .kaun_state
 
 permissions:
   contents: read
@@ -31,13 +43,13 @@ jobs:
 
       - run: pip install -r requirements-engine.txt
 
-      # Checkpoint carried between runs: restore the newest, save under a new key.
+      # Checkpoint carried between runs (per region): restore the newest, save under a new key.
       - name: Restore checkpoint
         uses: actions/cache/restore@v4
         with:
           path: .kaun_state
-          key: kaun-state-${{ github.run_id }}
-          restore-keys: kaun-state-
+          key: kaun-state-${{ env.KAUN_REGION }}-${{ github.run_id }}
+          restore-keys: kaun-state-${{ env.KAUN_REGION }}-
 
       - name: Tests
         run: python -m pytest
@@ -58,12 +70,12 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .kaun_state
-          key: kaun-state-${{ github.run_id }}
+          key: kaun-state-${{ env.KAUN_REGION }}-${{ github.run_id }}
 
       - name: Check feed is fresh
         id: check
         run: |
-          f=public/data/latest.json
+          if [ "$KAUN_REGION" = "delhi-ncr" ]; then f=public/data/latest.json; else f=public/data/$KAUN_REGION/latest.json; fi
           test -s "$f" || { echo "no feed written"; exit 1; }
           age=$(( $(date +%s) - $(stat -c %Y "$f") ))
           echo "feed age ${age}s"
@@ -74,9 +86,13 @@ jobs:
         with:
           path: public
 
+  # Pages serves the whole public/ folder from one artifact, so only the Delhi
+  # run deploys for now: a second region's run would publish a site without
+  # Delhi's feed. Other regions keep their results in Supabase and the artifact
+  # until the feed moves to per-region branches.
   deploy:
     needs: run
-    if: needs.run.outputs.published == 'true'
+    if: needs.run.outputs.published == 'true' && (!inputs.region || inputs.region == 'delhi-ncr')
     runs-on: ubuntu-latest
     environment:
       name: github-pages

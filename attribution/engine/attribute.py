@@ -16,14 +16,16 @@ import numpy as np
 import pandas as pd
 
 from ..config import DELTA_VARS, EXTRA_VARS, NMF_WINDOW_DAYS, POLLUTANTS
+from ..ingest import landuse as _landuse
 from ..ingest import traffic
-from ..labels import CONF_HI, LABELS_EN, LABELS_HI
+from ..labels import CONF_HI, LABELS_EN, LABELS_HI, MECHANISM_EN, MECHANISM_HI
 from . import confidence, factors, fingerprints, fusion, regional, spikes, wind_sector
 
 logger = logging.getLogger(__name__)
 
-ENGINE_VERSION = "kaun-0.1"
+ENGINE_VERSION = "kaun-0.2"
 IST = timezone(timedelta(hours=5, minutes=30))
+MIN_LOCAL_SHARE = 0.25   # below this the local part is too small to name a culprit
 
 def merge_obs(obs: pd.DataFrame, wind: pd.DataFrame) -> pd.DataFrame:
     obs = obs.copy()
@@ -64,22 +66,105 @@ def _excess_ratio(rows: pd.DataFrame) -> Optional[float]:
     return float(rows["delta_pm25"].astype(float).mean() / base)
 
 
-def _summary(name: str, start, end, shares: dict, sector: Optional[str], conf: str, calm: bool) -> tuple[str, str]:
+def _pct_txt(v: float, hi: bool = False) -> str:
+    if v >= 0.9:
+        return "90%+"
+    p = int(round(v * 100 / 5.0) * 5)
+    return f"लगभग {p}%" if hi else f"~{p}%"
+
+
+def _mix(shares: dict, labels: dict, n: int = 2, joiner: str = " + ") -> str:
+    top = sorted(shares.items(), key=lambda kv: -kv[1])[:n]
+    return joiner.join(f"{labels.get(k, k)} {int(round(v * 100))}%" for k, v in top if v >= 0.15) or "mixed"
+
+
+def build_cause(local: dict, local_top: Optional[str], reg: Optional[float], transported: bool,
+                profile: dict, cands: list[dict], wind: dict) -> dict:
+    """
+    One structure that answers "kaun?" in full:
+      local     the station's own excess (1 - regional share): fused source
+                shares plus named OSM candidates in the wind sector
+      regional  the airshed-wide part: how big, why it rose (mechanism) and
+                what it is made of (composition)
+      shares    the two folded together; top = the single biggest cause
+    """
+    reg = float(reg or 0.0)
+    comp = profile.get("composition") or {}
+    folded: dict[str, float] = {}
+    for k, v in local.items():
+        folded[k] = folded.get(k, 0.0) + v * (1 - reg)
+    if reg > 0:
+        if transported:
+            folded["transported_smoke"] = folded.get("transported_smoke", 0.0) + reg
+        elif comp:
+            for k, v in comp.items():
+                folded[k] = folded.get(k, 0.0) + v * reg
+        else:
+            folded["regional_background"] = folded.get("regional_background", 0.0) + reg
+    folded = {k: round(v, 3) for k, v in folded.items() if v >= 0.05}
+    tot = sum(folded.values())
+    folded = {k: round(v / tot, 3) for k, v in folded.items()} if tot > 0 else {}
+    top = max(folded, key=folded.get) if folded else None
+    local_share = round(1 - reg, 3)
+    return {
+        "top": top,
+        "shares": folded,
+        "local": {"share": local_share,
+                  "top": local_top if local_share >= MIN_LOCAL_SHARE else None,
+                  "candidates": cands if local_share >= MIN_LOCAL_SHARE else [],
+                  "sector": wind.get("sector"), "calm": wind.get("calm")},
+        "regional": {"share": round(reg, 3), "mechanism": profile.get("mechanism", "unclear"),
+                     "composition": comp, "wind_ms": profile.get("wind_ms"),
+                     "pbl_ratio": profile.get("pbl_ratio"), "stagnant": profile.get("stagnant"),
+                     "upwind_fires": profile.get("upwind_fires", 0), "transported": bool(transported),
+                     "n_stations": profile.get("n_stations", 0)},
+    }
+
+
+def _cause_text(cause: dict) -> tuple[str, str]:
+    """Plain-language cause, English and Hindi. No confidence here: the summary carries it."""
+    loc, regn = cause["local"], cause["regional"]
+    parts_en, parts_hi = [], []
+    if regn["share"] >= 0.3:
+        mech = regn["mechanism"]
+        why_en, why_hi = MECHANISM_EN.get(mech, ""), MECHANISM_HI.get(mech, "")
+        detail = []
+        if mech == "stagnation":
+            if regn.get("wind_ms") is not None:
+                detail.append(f"wind {regn['wind_ms']:.1f} m/s")
+            if regn.get("pbl_ratio") is not None:
+                detail.append(f"mixing height {int(round(regn['pbl_ratio'] * 100))}% of normal")
+        if mech == "transport":
+            detail.append(f"{regn['upwind_fires']} fires upwind")
+        made_of = regn.get("composition") or {}
+        made_en = f"; the shared air looks like {_mix(made_of, LABELS_EN)}" if made_of and not regn["transported"] else ""
+        made_hi = f"; हवा में मुख्यतः {_mix(made_of, LABELS_HI, joiner=' और ')}" if made_of and not regn["transported"] else ""
+        parts_en.append(f"{_pct_txt(regn['share'])} region-wide: {why_en}" + (f" ({', '.join(detail)})" if detail else "") + made_en)
+        parts_hi.append(f"{_pct_txt(regn['share'], True)} पूरे इलाके में: {why_hi}" + (f" ({', '.join(detail)})" if detail else "") + made_hi)
+    if loc["share"] >= MIN_LOCAL_SHARE and loc.get("top"):
+        where_en = (" (calm air: close by)" if loc.get("calm") else
+                    f" from the {wind_sector.SECTORS_EN[loc['sector']]}" if loc.get("sector") else "")
+        where_hi = (" (हवा शांत: पास से)" if loc.get("calm") else
+                    f" {wind_sector.SECTORS_HI[loc['sector']]} दिशा से" if loc.get("sector") else "")
+        names = ", ".join(f"{c['name']} ({c['type']}, {c['km']:g} km)" for c in loc["candidates"][:2])
+        parts_en.append(f"{_pct_txt(loc['share'])} local: {LABELS_EN.get(loc['top'], loc['top'])}{where_en}"
+                        + (f"; likely {names}" if names else ""))
+        parts_hi.append(f"{_pct_txt(loc['share'], True)} स्थानीय: {LABELS_HI.get(loc['top'], loc['top'])}{where_hi}"
+                        + (f"; संभवतः {names}" if names else ""))
+    if not parts_en:
+        return "source unclear", "स्रोत साफ़ नहीं"
+    return "; ".join(parts_en), "; ".join(parts_hi)
+
+
+def _summary(name: str, start, end, cause: dict, conf: str) -> tuple[str, str]:
     s_ist, e_ist = start.tz_convert(IST), (end + pd.Timedelta(hours=1)).tz_convert(IST)
     when = f"{s_ist:%H:%M}-{e_ist:%H:%M} IST {s_ist:%d %b}"
-    if not shares:
-        return (f"Spike at {name}, {when}: source unclear, confidence low.",
-                f"{name} में {when} प्रदूषण बढ़ा: स्रोत साफ़ नहीं, भरोसा कम।")
-    top = max(shares, key=shares.get)
-    pct = int(round(shares[top] * 100 / 5.0) * 5)
-    pct_txt = "90%+" if shares[top] >= 0.9 else f"~{pct}%"
-    regional_top = top in ("regional_background", "transported_smoke", "secondary")
-    where_en = (" across the region" if regional_top else " from nearby (calm wind)" if calm else
-                f" arriving from the {wind_sector.SECTORS_EN[sector]}" if sector else "")
-    where_hi = (" पूरे इलाके में" if regional_top else " पास से (हवा शांत)" if calm else
-                f" {wind_sector.SECTORS_HI[sector]} दिशा से" if sector else "")
-    en = f"Spike at {name}, {when}: {pct_txt} {LABELS_EN[top]}{where_en}, confidence {conf}."
-    hi = f"{name} में {when} प्रदूषण बढ़ा: {pct_txt.replace('~', 'लगभग ')} {LABELS_HI[top]}{where_hi}, भरोसा {CONF_HI[conf]}।"
+    text_en, text_hi = _cause_text(cause)
+    top = cause.get("top")
+    head_en = f"{LABELS_EN[top]} {_pct_txt(cause['shares'][top])}" if top else "source unclear"
+    head_hi = f"{LABELS_HI[top]} {_pct_txt(cause['shares'][top], True)}" if top else "स्रोत साफ़ नहीं"
+    en = f"Spike at {name}, {when}: {head_en}. {text_en}; confidence {conf}."
+    hi = f"{name} में {when} प्रदूषण बढ़ा: {head_hi}. {text_hi}. भरोसा {CONF_HI[conf]}।"
     return en, hi
 
 
@@ -94,9 +179,10 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
     stations: {station_id: {"name", "latitude", "longitude"}}.
     since: only attribute windows that END at or after this hour (the rest were
     attributed by earlier runs); None = all.
-    landuse: {station_id: sector grid} from ingest/landuse.py (optional).
+    landuse: {station_id: inventory} from ingest/landuse.py (optional).
     """
-    landuse = landuse or {}
+    grids = landuse or {}
+    fleet_near = _landuse.fleet_near_mean(grids)
     if obs.empty:
         return []
     data = merge_obs(obs, wind)
@@ -111,6 +197,7 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
 
     out = []
     models: dict[str, Optional[dict]] = {}
+    profiles: dict[tuple, dict] = {}   # regional profile per (start, end): shared by every station in that window
     for w in wins:
         sid = w["station_id"]
         st_rows = flagged.loc[flagged["station_id"] == sid]
@@ -141,7 +228,7 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
             "secondary_rh": fusion.term_secondary(fp["ratios"], totals.get("rh")),
             "fresh_no": fusion.term_fresh_no(d),
             "time_temp": fusion.term_time_temp(list(rows["hour"]), tprior, totals.get("temp")),
-            "upwind_landuse": fusion.term_landuse(landuse.get(sid), ww),
+            "upwind_landuse": fusion.term_landuse(grids.get(sid), ww, fleet_near),
             "pollutant_wind": fusion.term_cbpf(cb_all, ww),
             "factors": fusion.term_nmf(nmf),
             "local_fires": fusion.term_local_fires(n_fires),
@@ -170,7 +257,13 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
             agreeing_terms=fused["agreeing_terms"],
         )
         name = meta.get("name", sid)
-        en, hi = _summary(name, w["start"], w["end"], shares, ww["sector"], level, bool(ww.get("calm")))
+        key = (w["start"], w["end"])
+        if key not in profiles:
+            profiles[key] = regional.regional_profile(flagged, w["hours"], w["start"], fires_up, transported)
+        cands = _landuse.candidates(grids.get(sid), local_top, ww)
+        cause = build_cause(local, local_top, reg, transported, profiles[key], cands, ww)
+        cause["text_en"], cause["text_hi"] = _cause_text(cause)
+        en, hi = _summary(name, w["start"], w["end"], cause, level)
         top = max(shares, key=shares.get) if shares else None
         out.append({
             "id": attribution_id(sid, w["start"]),
@@ -191,6 +284,7 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
             "confidence": level,
             "summary_en": en,
             "summary_hi": hi,
+            "cause": cause,
             "evidence": {
                 "ratios": fp["ratios"],
                 "fingerprint_scores": fp["scores"],

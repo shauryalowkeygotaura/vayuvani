@@ -78,14 +78,51 @@ def get(
     raise BadResponse(f"GET {url} failed after {retries} attempts: {last_exc}")
 
 
-def get_json(url: str, **kwargs) -> Any:
-    resp = get(url, **kwargs)
+def _parse_json(resp: requests.Response, url: str) -> Any:
     if not resp.text.strip():
         raise BadResponse(f"empty body from {url}")
     try:
         return resp.json()
     except (ValueError, json.JSONDecodeError) as e:
         raise BadResponse(f"non-JSON from {url}: {_snippet(resp.text)}") from e
+
+
+def get_json(url: str, **kwargs) -> Any:
+    return _parse_json(get(url, **kwargs), url)
+
+
+def post_json(
+    url: str,
+    data: Optional[dict] = None,
+    headers: Optional[dict] = None,
+    timeout: float = 60.0,
+    retries: int = 2,
+) -> Any:
+    """Form-encoded POST (Overpass wants the query in a `data` field), same checks as get()."""
+    headers = {"User-Agent": USER_AGENT, **(headers or {})}
+    last_exc: Optional[Exception] = None
+    for attempt in range(retries):
+        try:
+            resp = requests.post(url, data=data, headers=headers, timeout=timeout)
+        except requests.RequestException as e:
+            last_exc = e
+            logger.warning(f"POST {url} network error (attempt {attempt + 1}): {e}")
+            time.sleep(2 ** attempt)
+            continue
+        code = resp.status_code
+        if code in (401, 403):
+            raise AuthError(f"{code} from {url}: {_snippet(resp.text)}")
+        if code in (429, 451):
+            raise RateLimited(f"{code} from {url}: {_snippet(resp.text)}")
+        if 500 <= code < 600:
+            last_exc = BadResponse(f"{code} from {url}")
+            logger.warning(f"POST {url} -> {code} (attempt {attempt + 1})")
+            time.sleep(2 ** attempt)
+            continue
+        if code != 200:
+            raise BadResponse(f"{code} from {url}: {_snippet(resp.text)}")
+        return _parse_json(resp, url)
+    raise BadResponse(f"POST {url} failed after {retries} attempts: {last_exc}")
 
 
 def get_text(url: str, **kwargs) -> str:

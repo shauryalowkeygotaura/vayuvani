@@ -65,3 +65,14 @@ def test_approve_reject_and_whitelist(tmp_path):
 def test_chart_svg_empty_and_full():
     assert "<svg" in evidence.chart_svg([])
     assert "polyline" in evidence.chart_svg(rec()["evidence"]["hourly"])
+
+
+def test_routing_uses_the_local_part_of_the_cause():
+    from reporting.agencies import routing_source
+    rec = {"top_source": "regional_background",
+           "cause": {"local": {"share": 0.45, "top": "industry"}, "regional": {"share": 0.55}}}
+    assert routing_source(rec) == "industry"
+    rec["cause"]["local"]["share"] = 0.2
+    assert routing_source(rec) == "regional_background"
+    assert routing_source({"top_source": "traffic"}) == "traffic"
+    assert routing_source({"top_source": "dust", "cause": "{not json"}) == "dust"

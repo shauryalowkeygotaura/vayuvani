@@ -14,7 +14,7 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from ..config import PUBLIC_DIR
+from ..config import DATA_SUBDIR, PUBLIC_DIR
 
 DISCLAIMER = (
     "Observation-driven estimates from station ratios, wind and fire data. "
@@ -83,7 +83,7 @@ def build(records: list[dict], stations: dict[str, dict], now: Optional[datetime
 
 
 def write(feed: dict, root: Optional[str] = None) -> list[str]:
-    d = os.path.join(root or PUBLIC_DIR, "data")
+    d = os.path.join(root or PUBLIC_DIR, DATA_SUBDIR)
     os.makedirs(d, exist_ok=True)
     paths = []
     for name in ("latest", "history"):

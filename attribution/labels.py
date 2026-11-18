@@ -24,6 +24,20 @@ LABELS_HI = {
 }
 CONF_HI = {"low": "कम", "medium": "मध्यम", "high": "अधिक"}
 
+# Why the whole airshed rose (attribution/engine/regional.py regional_profile).
+MECHANISM_EN = {
+    "stagnation": "stagnant air trapped the city's own emissions",
+    "transport": "smoke carried in from fires upwind",
+    "regional_rise": "the whole region rose together",
+    "unclear": "region-wide rise, cause unclear",
+}
+MECHANISM_HI = {
+    "stagnation": "ठहरी हवा में शहर का अपना धुआं जमा हुआ",
+    "transport": "दूर की आग का धुआं हवा के साथ आया",
+    "regional_rise": "पूरा इलाका एक साथ बढ़ा",
+    "unclear": "पूरे इलाके में बढ़ोतरी, कारण साफ़ नहीं",
+}
+
 SECTORS_HI = {
     "N": "उत्तर", "NE": "उत्तर-पूर्व", "E": "पूर्व", "SE": "दक्षिण-पूर्व",
     "S": "दक्षिण", "SW": "दक्षिण-पश्चिम", "W": "पश्चिम", "NW": "उत्तर-पश्चिम",
