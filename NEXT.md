@@ -153,3 +153,18 @@ after every change and append the table to the report.
 ### Done when
 - Blind test passes the twins check and at least 3 of the witness checks (p < 0.05).
 - Precision of published calls >= 95% on >= 100 held-out labels per class, interval reported, coverage reported.
+
+### 12d. External answer key: test the method where sources are measured (do this first, 2026-11-18)
+Shaurya is chasing Delhi's own answer key (Gani email + DPCC RTI, `docs/outreach/answer_key_requests.md`).
+Meanwhile prove or kill the method on data where hourly sources are measured:
+- [ ] Find an open dataset with hourly measured source shares AND co-located hourly PM2.5, PM10, NO2, CO, SO2
+  (and ideally several stations within a city): candidates to check, in order: ACTRIS / EBAS aethalometer
+  black carbon split into wood burning vs fossil (BCwb / BCff); ClearfLo 2012 London (North Kensington,
+  Marylebone Road) data archive; Paris SIRTA ACSM organic-aerosol PMF (HOA = traffic, BBOA = burning);
+  US EPA AQS hourly gases next to speciation sites. Write what is actually downloadable, with URLs.
+- [ ] `attribution/validation/external.py`: load it into the same hourly_obs shape, run the engine with
+  `chemistry_only()` (blind.py), score burning vs traffic calls against the measured split: precision,
+  recall, and the calibration curve of the fusion posterior.
+- [ ] Use it to improve the method (term weights by logistic regression, abstention threshold for 95%
+  precision), then re-run the Delhi blind test. Report both numbers. A London result is evidence the
+  method works, not a Delhi accuracy number: never quote it as one.
