@@ -10,6 +10,7 @@ import re
 from typing import Optional
 
 MOLAR_VOLUME = 24.45
+CO_PPB_FLOOR = 50.0   # below this a "ppb" CO value is CPCB mg/m3 mislabelled by OpenAQ
 MW = {"no2": 46.01, "so2": 64.07, "o3": 48.00, "co": 28.01, "no": 30.01, "nox": 46.01}
 
 _UNIT_ALIASES = {
@@ -54,6 +55,12 @@ def to_standard(param: str, value: Optional[float], unit: Optional[str]) -> Opti
         if u == "ppm":
             return v * MW["co"] / MOLAR_VOLUME
         if u == "ppb":
+            # OpenAQ's CPCB CO sensors are tagged "ppb" but carry CPCB's mg/m3
+            # numbers (R K Puram, 17 Nov 2026: 0.9-1.9 "ppb"). Real ambient CO is
+            # never below ~50 ppb, so a value that low is the mislabel, not ppb.
+            # Before this, every Delhi station's CO was ~1000x too low.
+            if v < CO_PPB_FLOOR:
+                return v
             return v * MW["co"] / MOLAR_VOLUME / 1000.0
         return None
     if param == "rh":

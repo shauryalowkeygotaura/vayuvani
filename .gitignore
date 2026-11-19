@@ -9,3 +9,4 @@ public/evidence/
 .pytest_cache/
 .venv/
 supabase/.temp/
+attribution/validation/*.csv

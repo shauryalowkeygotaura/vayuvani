@@ -13,6 +13,9 @@ def test_units():
     assert to_standard("co", 1500, "µg/m³") == pytest.approx(1.5)
     assert to_standard("co", 1.0, "ppm") == pytest.approx(28.01 / 24.45)
     assert to_standard("no2", 10, "ppb") == pytest.approx(10 * 46.01 / 24.45)
+    # OpenAQ CPCB CO sensors: "ppb" tag on mg/m3 values (1.47 ppb is impossible air).
+    assert to_standard("co", 1.47, "ppb") == pytest.approx(1.47)
+    assert to_standard("co", 1200, "ppb") == pytest.approx(1200 * 28.01 / 24.45 / 1000)
     assert to_standard("pm25", 80, "µg/m³") == 80
     assert to_standard("pm25", 80, "ppm") is None          # nonsense unit rejected
     assert to_standard("so2", -3, "µg/m³") is None         # negative rejected

@@ -73,3 +73,11 @@ Shaurya's ask: "pin point exactly what is causing the pollution, other than just
 **Honest limits added to docs/KAUN.md:** regional composition is a mix estimate; OSM candidates are places to look, not accusations; calm air gives no direction.
 
 **Not done / next:** Oct-Nov 2025 backfill (Step 4); Pipecat phone (Step 10); report board (Step 11); a second region needs its own 7-day baseline; the portals are login-gated so the extension cannot be tested past the registration page without Shaurya's account.
+
+## 2026-11-18/19: blind test, CO bug, London answer key
+
+- Blind test (`attribution/validation/blind.py`): local source calls agree with no independent witness in Delhi (twins 34% = chance). Factor labels made station-relative (PR #6, merged).
+- CO bug: OpenAQ's CPCB CO is mg/m3 tagged "ppb"; all Delhi CO was ~1000x low. Fixed + 11,506 rows corrected in Supabase (SQL via Management API, `co < 0.05` guard).
+- London AURN answer key (13 sites, 2014-2023): current method 58% on 55 events; learned absolute ratios 78-91% held-out; toluene/benzene ~97% (21 burning hours). London model does not transfer to Delhi (99% burning).
+- CPCB CCR serves BTX/NH3 behind captcha + encrypted API: not scraped. Added BTX/NH3 to the DPCC RTI draft. Answer-key requests (Gani email, RTI) are a P1 handoff in the command center.
+- PR #7 open (CO fix + London tests). Next: Delhi labels -> Delhi-calibrated model with abstention.

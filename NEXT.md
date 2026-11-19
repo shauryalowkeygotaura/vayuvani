@@ -168,3 +168,9 @@ Meanwhile prove or kill the method on data where hourly sources are measured:
 - [ ] Use it to improve the method (term weights by logistic regression, abstention threshold for 95%
   precision), then re-run the Delhi blind test. Report both numbers. A London result is evidence the
   method works, not a Delhi accuracy number: never quote it as one.
+
+### 12 status (19 Nov 2026, overnight run)
+- Done: CO unit bug (every Delhi CO value ~1000x low, OpenAQ "ppb" tag on mg/m3; code fixed, 11,506 stored rows corrected). London answer key built (`attribution/validation/external.py`, `london_deltas.py`, reports in that folder).
+- Learned: with PM, NO2, NO, CO, SO2 alone, traffic vs burning tops out ~80-91% held-out precision in London; toluene/benzene reaches ~97% (small sample). A London-trained model does not transfer to Delhi (calls 99% burning). **95% in Delhi needs (a) Delhi labels and (b) BTX / NH3.**
+- Blocked: OpenAQ has no BTX or NH3 for Delhi (checked 158 locations). CPCB's CCR portal serves them but behind a captcha and encrypted API: not scraped (that is access-control circumvention). Routes: the RTI already drafted (add BTX and NH3 for all Delhi CAAQMS stations to it), or a data request to CPCB; data.gov.in has NH3 but only live values and its key is not a GitHub secret (Shaurya declined copying it on 18 Nov; ask first).
+- Next for a cloud session: (1) Delhi labels the moment any arrive; (2) a Delhi-calibrated absolute-ratio model with abstention, scored on those labels; (3) keep the cards' local source tagged unverified until (2) shows >= 95% on held-out labels.
