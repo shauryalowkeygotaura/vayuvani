@@ -114,8 +114,10 @@ COLMAP = {"PM2.5": "pm25", "PM10": "pm10", "NO": "no", "NO2": "no2", "CO": "co",
           "NH3": "nh3", "Benzene": "benzene", "Toluene": "toluene"}
 
 
-def fetch_obs() -> pd.DataFrame:
-    path = os.path.join(CACHE, "cpcb_winters.csv")
+def fetch_obs(path: str = None, stations: dict = None, winters=WINTERS) -> pd.DataFrame:
+    """CPCB hourly rows for `stations` in `winters`, cached at `path` (UTC, engine units)."""
+    path = path or os.path.join(CACHE, "cpcb_winters.csv")
+    stations = stations or STATIONS
     if not os.path.exists(path):
         src = os.path.join(CACHE, "station_hour.csv.gz")
         if not os.path.exists(src):
@@ -124,11 +126,11 @@ def fetch_obs() -> pd.DataFrame:
                 raise http.BadResponse("station_hour mirror: unexpectedly small download")
             with open(src, "wb") as f:
                 f.write(resp.content)
-        parts = [c[c["StationId"].isin(list(STATIONS))] for c in pd.read_csv(src, chunksize=500_000)]
+        parts = [c[c["StationId"].isin(list(stations))] for c in pd.read_csv(src, chunksize=500_000)]
         d = pd.concat(parts)
         t = pd.to_datetime(d["Datetime"])
         keep = np.zeros(len(d), bool)
-        for a, b in WINTERS:
+        for a, b in winters:
             keep |= ((t >= a) & (t < b)).to_numpy()
         d.loc[keep].to_csv(path, index=False)
     d = pd.read_csv(path)
@@ -315,6 +317,13 @@ def export_model(df: pd.DataFrame) -> dict:
                                   "intercept": round(float(m.intercept_[0]), 5),
                                   "mean": sc.mean_.round(5).tolist(), "scale": sc.scale_.round(5).tolist(),
                                   "impute": imp.statistics_.round(5).tolist()}
+    # Keep the transfer results from more_keys.py (they decide what is named outside 5 km).
+    if os.path.exists(answer_key.MODEL_PATH):
+        with open(answer_key.MODEL_PATH, encoding="utf-8") as fh:
+            prev = json.load(fh)
+        for k in ("outside_validated", "transfer_checks"):
+            if k in prev:
+                out[k] = prev[k]
     with open(answer_key.MODEL_PATH, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=1)
     return out
