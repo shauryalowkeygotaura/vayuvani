@@ -30,6 +30,7 @@ import numpy as np
 import pandas as pd
 
 from .. import http
+from ..engine import answer_key
 from ..config import STATE_DIR
 
 HERE = os.path.dirname(__file__)
@@ -160,28 +161,14 @@ def increments(obs: pd.DataFrame) -> pd.DataFrame:
 
 
 def features(x: pd.DataFrame, min_dpm: float = 5.0) -> pd.DataFrame:
-    """Chemistry of the local increment and of the hour itself; no clock, no map."""
-    f = pd.DataFrame(index=x.index)
-    dpm = x["d_pm25"]
-    keep = dpm >= min_dpm
+    """The engine's live chemistry features (engine/answer_key.py) plus the CPCB-only markers."""
+    f = answer_key.chem_features(x)
     pos = lambda s, lo: s.clip(lower=lo)
-    f["l_dno2_dpm"] = np.log10(pos(x["d_no2"], 0.5) / pos(dpm, 0.5))
-    f["l_dco_dpm"] = np.log10(pos(x["d_co"], 0.005) / pos(dpm, 0.5))
-    f["l_dso2_dpm"] = np.log10(pos(x["d_so2"], 0.2) / pos(dpm, 0.5))
-    f["d_fine"] = (dpm / x["d_pm10"]).where(x["d_pm10"] > 5).clip(-1, 2)
-    f["fine"] = (x["v_pm25"] / x["v_pm10"]).clip(0, 1.5)
-    f["l_no2_pm"] = np.log10(pos(x["v_no2"], 0.5) / pos(x["v_pm25"], 1))
-    f["l_co_pm"] = np.log10(pos(x["v_co"], 0.01) / pos(x["v_pm25"], 1))
-    f["l_so2_pm"] = np.log10(pos(x["v_so2"], 0.5) / pos(x["v_pm25"], 1))
-    f["l_o3"] = np.log10(pos(x["v_o3"], 0.5))
-    mol_no, mol_no2 = pos(x["v_no"], 0) / 30.01, pos(x["v_no2"], 0) / 46.01
-    f["no_frac"] = (mol_no / (mol_no + mol_no2)).where((mol_no + mol_no2) > 0.2)
-    f["l_dpm"] = np.log10(pos(dpm, 0.5))
     # Markers CPCB measures at many Delhi stations but OpenAQ does not carry:
     f["l_tb"] = np.log10(pos(x["v_toluene"], 0.05) / pos(x["v_benzene"], 0.05))   # traffic ~3-4, burning ~1-1.5
-    f["l_dbz_dpm"] = np.log10(pos(x["d_benzene"], 0.02) / pos(dpm, 0.5))
+    f["l_dbz_dpm"] = np.log10(pos(x["d_benzene"], 0.02) / pos(x["d_pm25"], 0.5))
     f["l_nh3_pm"] = np.log10(pos(x["v_nh3"], 0.5) / pos(x["v_pm25"], 1))
-    return f.loc[keep]
+    return f.loc[x["d_pm25"] >= min_dpm]
 
 
 CHEM = ("l_dno2_dpm", "l_dco_dpm", "l_dso2_dpm", "d_fine", "fine", "l_no2_pm", "l_co_pm", "l_so2_pm",
@@ -302,6 +289,37 @@ def binary_eval(df: pd.DataFrame, target: str, feats: tuple, model: str) -> dict
             "curve": curve(probs, np.array(["not", "up"]), d.loc[ok, "y"].to_numpy())}
 
 
+def export_model(df: pd.DataFrame) -> dict:
+    """Fit the live model (logit, OpenAQ-carried features) on every labelled hour; write engine/answer_key_model.json."""
+    from sklearn.impute import SimpleImputer
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+    feats = list(answer_key.FEATURES)
+    out = {"version": "rai2020-logit-v1", "trained_on": "IIT Delhi Xact PMF factors (Rai et al. 2020, Zenodo 3907250) "
+           "vs CPCB hourly at Sri Aurobindo Marg, Sirifort, R K Puram; winters 2018-19",
+           "threshold": answer_key.THRESHOLD, "sources": {}, "validated": [], "held_out": {}}
+    for target in ("biomass_burning", "traffic", "dust", "industry"):
+        cv = binary_eval(df, target, tuple(feats), "logit")
+        at = next((c for c in cv["curve"] if c["threshold"] == answer_key.THRESHOLD), None)
+        out["held_out"][target] = at
+        if at and at["precision"] >= 0.95:
+            out["validated"].append(target)
+        e = df[f"ex_{target}"]
+        d = df.loc[(e >= UP) | (e <= DOWN)]
+        y = (d[f"ex_{target}"] >= UP).to_numpy()
+        imp = SimpleImputer().fit(d[feats])
+        xi = imp.transform(d[feats])
+        sc = StandardScaler().fit(xi)
+        m = LogisticRegression(class_weight="balanced", max_iter=2000).fit(sc.transform(xi), y)
+        out["sources"][target] = {"features": feats, "coef": m.coef_[0].round(5).tolist(),
+                                  "intercept": round(float(m.intercept_[0]), 5),
+                                  "mean": sc.mean_.round(5).tolist(), "scale": sc.scale_.round(5).tolist(),
+                                  "impute": imp.statistics_.round(5).tolist()}
+    with open(answer_key.MODEL_PATH, "w", encoding="utf-8") as fh:
+        json.dump(out, fh, indent=1)
+    return out
+
+
 def main():
     fac = load_factors()
     ex = family_excess(fac)
@@ -333,4 +351,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--export" in sys.argv:
+        _df = network_features(fetch_obs()).join(family_excess(load_factors()).add_prefix("ex_"), how="inner")
+        _m = export_model(_df)
+        print(json.dumps({"validated": _m["validated"], "held_out": _m["held_out"]}, indent=1))
+    else:
+        main()

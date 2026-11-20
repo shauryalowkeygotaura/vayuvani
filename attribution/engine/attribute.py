@@ -15,11 +15,11 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from ..config import DELTA_VARS, EXTRA_VARS, NMF_WINDOW_DAYS, POLLUTANTS
+from ..config import DELTA_VARS, EXTRA_VARS, NMF_WINDOW_DAYS, POLLUTANTS, REGION
 from ..ingest import landuse as _landuse
 from ..ingest import traffic
 from ..labels import CONF_HI, LABELS_EN, LABELS_HI, MECHANISM_EN, MECHANISM_HI
-from . import confidence, factors, fingerprints, fusion, regional, spikes, wind_sector
+from . import answer_key, confidence, factors, fingerprints, fusion, regional, spikes, wind_sector
 
 logger = logging.getLogger(__name__)
 
@@ -163,6 +163,11 @@ def _summary(name: str, start, end, cause: dict, conf: str) -> tuple[str, str]:
     top = cause.get("top")
     head_en = f"{LABELS_EN[top]} {_pct_txt(cause['shares'][top])}" if top else "source unclear"
     head_hi = f"{LABELS_HI[top]} {_pct_txt(cause['shares'][top], True)}" if top else "स्रोत साफ़ नहीं"
+    ak_en, ak_hi = answer_key.text(cause.get("answer_key"))
+    if ak_en:
+        en = f"Spike at {name}, {when}: {head_en}. {text_en}. {ak_en} Overall confidence {conf}."
+        hi = f"{name} में {when} प्रदूषण बढ़ा: {head_hi}. {text_hi}. {ak_hi} कुल भरोसा {CONF_HI[conf]}।"
+        return en, hi
     en = f"Spike at {name}, {when}: {head_en}. {text_en}; confidence {conf}."
     hi = f"{name} में {when} प्रदूषण बढ़ा: {head_hi}. {text_hi}. भरोसा {CONF_HI[conf]}।"
     return en, hi
@@ -263,6 +268,12 @@ def run(obs: pd.DataFrame, wind: pd.DataFrame, fires: list[dict], stations: dict
         cands = _landuse.candidates(grids.get(sid), local_top, ww)
         cause = build_cause(local, local_top, reg, transported, profiles[key], cands, ww)
         cause["text_en"], cause["text_hi"] = _cause_text(cause)
+        # The answer key was measured in Delhi: other regions get no verdict.
+        ak = answer_key.check(flagged, sid, w["hours"], stations) if REGION.get("id") == "delhi-ncr" else None
+        if ak:
+            cause["answer_key"] = ak
+            ak_en, ak_hi = answer_key.text(ak)
+            cause["text_en"], cause["text_hi"] = f"{cause['text_en']}. {ak_en}", f"{cause['text_hi']}. {ak_hi}"
         en, hi = _summary(name, w["start"], w["end"], cause, level)
         top = max(shares, key=shares.get) if shares else None
         out.append({
