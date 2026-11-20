@@ -81,3 +81,10 @@ Shaurya's ask: "pin point exactly what is causing the pollution, other than just
 - London AURN answer key (13 sites, 2014-2023): current method 58% on 55 events; learned absolute ratios 78-91% held-out; toluene/benzene ~97% (21 burning hours). London model does not transfer to Delhi (99% burning).
 - CPCB CCR serves BTX/NH3 behind captcha + encrypted API: not scraped. Added BTX/NH3 to the DPCC RTI draft. Answer-key requests (Gani email, RTI) are a P1 handoff in the command center.
 - PR #7 open (CO fix + London tests). Next: Delhi labels -> Delhi-calibrated model with abstention.
+
+## 2026-11-20: Delhi answer key, measured-source check wired
+- Built `attribution/validation/delhi_rai.py`: IIT Delhi Xact PMF factors (Rai 2020) vs CPCB hourly at 3 nearby stations.
+- Per-source "elevated?" models with abstention reach 95%+ on held-out weeks for burning (97.4%) and traffic (97.0%).
+- Wired `attribution/engine/answer_key.py` into the engine: Delhi cards name a source only at >= 95%, else "unsure"; scope stated.
+- Verified: 143 tests pass; end-to-end replay 23/23 calls matched measured sources (in-sample).
+- Next: get a second answer key (another site/season) to test transfer beyond IIT Delhi; BTX/NH3 would lift dust and industry.

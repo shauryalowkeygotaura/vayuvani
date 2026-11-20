@@ -159,3 +159,22 @@ The checkpoint lives in `.kaun_state/checkpoint.json`, carried between runs by `
 - Facts used: DSS = IITM, 10 km grid, 2021 inventory, suspended by CAQM in late 2025. CSE stubble share 4.9% (2025 season),
   15.5% (2024). Diwali 2025 = Mon 20 Oct 2025
   ([The Week](https://www.theweek.in/news/india/2025/10/21/delhi-wakes-up-to-toxic-air-after-diwali-night-aqi-in-very-poor-category.html)).
+
+## Measured-source check (answer key, 2026-11-20)
+
+Every Delhi-NCR card now carries one extra sentence from `attribution/engine/answer_key.py`:
+"Measured-source check (95%+ sure): burning elevated", or "unsure, no source reaches 95%".
+
+- **Trained on measured sources**, not on Kaun's own rules: hourly PMF factors from an Xact XRF at
+  IIT Delhi (Rai et al. 2020, https://zenodo.org/records/3907250), winters 2018 and 2019, paired with
+  CPCB hourly data at Sri Aurobindo Marg, Sirifort and R K Puram (CPCB CCR 2015-2020 compilation,
+  mirrored at https://huggingface.co/datasets/khush-thakkar-09/station_hour).
+- **Held-out weeks, at >= 0.95 confidence, live features only:** burning 97.4% precise (calls 39% of
+  hours), traffic 97.0% (25%). Dust 93.7% and industry 85.8% miss the bar, so they are never named.
+  Report: `attribution/validation/DELHI_RAI_REPORT.md`; rebuild with
+  `python -m attribution.validation.delhi_rai --export`.
+- **End-to-end replay** of the 2018-19 spikes through `spikes.detect` and the check: 23 calls,
+  23 matched the measured source (in-sample, so a wiring check, not a new accuracy number).
+- **Limits:** one site, two winters, the ambiguous middle band dropped from training, threshold
+  chosen on the same CV. Cards farther than 5 km from IIT Delhi say "not validated at this station".
+  Other regions get no verdict.
