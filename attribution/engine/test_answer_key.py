@@ -46,7 +46,18 @@ def test_unsure_below_threshold_and_scope_text():
     ak = A.check(flagged, "a", hours, st, model=_model(-10.0))
     assert ak["unsure"] and ak["calls"] == [] and not ak["validated_area"]
     en, _ = A.text(ak)
-    assert "unsure" in en and "not at this station" in en
+    assert "unsure" in en and "not validated at this station" in en
+
+
+def test_outside_validated_area_names_burning_only():
+    m = _model(-10.0)
+    m["outside_validated"] = ["biomass_burning"]
+    flagged, hours, st = _flagged(co=2000.0)           # log10(10) = 1 -> traffic ~1, burning ~0
+    ak_in = A.check(flagged, "a", hours, st, model=m)
+    assert ak_in["calls"] == ["traffic"]
+    st["a"] = {"latitude": 28.75, "longitude": 77.10}
+    ak_out = A.check(flagged, "a", hours, st, model=m)
+    assert ak_out["calls"] == [] and ak_out["p_elevated"]["traffic"] > 0.95
 
 
 def test_shipped_model_loads():

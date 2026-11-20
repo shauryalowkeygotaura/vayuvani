@@ -325,5 +325,21 @@
    "coverage": 0.24226997298810016,
    "n": 236
   }
+ },
+ "outside_validated": [
+  "biomass_burning"
+ ],
+ "transfer_checks": {
+  "wang_iitd_voc": {
+   "traffic": "84/84",
+   "biomass_burning": "79/79"
+  },
+  "asap_iitd": {
+   "biomass_burning": "36/45 (most misses were waste burning, booked to ASAP's chloride factor)"
+  },
+  "wang_mriu_faridabad": {
+   "traffic": "75/127 (does not transfer)",
+   "biomass_burning": "18/20"
+  }
  }
 }

@@ -178,3 +178,16 @@ Every Delhi-NCR card now carries one extra sentence from `attribution/engine/ans
 - **Limits:** one site, two winters, the ambiguous middle band dropped from training, threshold
   chosen on the same CV. Cards farther than 5 km from IIT Delhi say "not validated at this station".
   Other regions get no verdict.
+
+### More answer keys (2026-11-20): the shipped model on data it never saw
+`python -m attribution.validation.more_keys`, report in `attribution/validation/MORE_KEYS_REPORT.md`.
+
+| Key | Where | Traffic calls right | Burning calls right |
+|---|---|---|---|
+| Wang et al. 2020 VOC PMF (zenodo 3931977) | IIT Delhi | 84/84 | 79/79 |
+| ASAP-Delhi high-res PMF (zenodo 19713313) | IIT Delhi | n/a | 36/45 (most misses: waste burning, which ASAP books to a separate chloride factor) |
+| Wang et al. 2020 VOC PMF | MRIU Faridabad, monitors 6-10 km away | 75/127 (fails) | 18/20 |
+
+So: near IIT Delhi both calls hold on independent instruments. Away from it burning mostly
+transfers and traffic does not (it is too local for monitors 6-10 km off). Cards outside 5 km of
+IIT Delhi therefore name burning only, and say it was 18 of 20 at a second site.

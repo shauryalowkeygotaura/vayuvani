@@ -88,3 +88,9 @@ Shaurya's ask: "pin point exactly what is causing the pollution, other than just
 - Wired `attribution/engine/answer_key.py` into the engine: Delhi cards name a source only at >= 95%, else "unsure"; scope stated.
 - Verified: 143 tests pass; end-to-end replay 23/23 calls matched measured sources (in-sample).
 - Next: get a second answer key (another site/season) to test transfer beyond IIT Delhi; BTX/NH3 would lift dust and industry.
+
+## 2026-11-20 (later): more answer keys
+- `attribution/validation/more_keys.py`: shipped model scored on Wang 2020 VOC PMF (IIT Delhi, MRIU Faridabad) and ASAP-Delhi PMF (IIT Delhi). Untrained, out-of-sample.
+- IIT Delhi VOC key: 84/84 traffic, 79/79 burning. MRIU: burning 18/20, traffic 75/127. ASAP burning 36/45 (definition gap: waste burning in its chloride factor).
+- Engine change: outside 5 km of IIT Delhi only burning is named; traffic suppressed. 144 tests pass.
+- Next: Faridabad/Gurugram keys with closer monitors; any key outside south Delhi.

@@ -12,9 +12,11 @@ the live (OpenAQ) features: burning 97.4%, traffic 97.0%, dust 93.7%, industry
 "validated" list: burning and traffic) are ever named on a card; dust and
 industry probabilities are kept in the evidence but never called.
 
-Scope, stated on every card: validated for the area around IIT Delhi only.
-Elsewhere in Delhi-NCR the same model runs, and the card says it is not
-validated there.
+Scope, stated on every card: validated for the area around IIT Delhi (5 km).
+Later checks on keys it never saw (attribution/validation/more_keys.py): a VOC
+instrument at IIT Delhi agreed on 84/84 traffic and 79/79 burning calls; at MRIU
+Faridabad (monitors 6-10 km away) burning held (18/20) but traffic did not
+(75/127). So outside 5 km only burning is ever named, and the card says so.
 
 Features use only what OpenAQ carries live (PM2.5, PM10, NO2, CO, SO2, O3, NO):
 the hour's levels and its increment over the station's same-hour 7-day median,
@@ -130,12 +132,16 @@ def check(flagged: pd.DataFrame, sid: str, hours: list, stations: dict, model: O
             x[f"d_{p}"] = _col(g, f"delta_{p}")
         probs.append(predict(network(x), model))
     p = {k: round(float(np.mean([q[k] for q in probs])), 3) for k in probs[0]}
-    validated = set(model.get("validated", []))
-    calls = [k for k, v in sorted(p.items(), key=lambda kv: -kv[1]) if v >= THRESHOLD and k in validated]
     me = stations.get(sid) or {}
     km = (haversine_km(SITE[0], SITE[1], me["latitude"], me["longitude"])
           if me.get("latitude") is not None and me.get("longitude") is not None else None)
     inside = km is not None and km <= VALIDATED_KM
+    # Away from IIT Delhi only what transferred to the second site (MRIU Faridabad) is named:
+    # burning 18/20 there, traffic 75/127 (traffic is too local for monitors 6-10 km away).
+    validated = set(model.get("validated", []))
+    if not inside:
+        validated &= set(model.get("outside_validated", []))
+    calls = [k for k, v in sorted(p.items(), key=lambda kv: -kv[1]) if v >= THRESHOLD and k in validated]
     return {"model": model.get("version"), "threshold": THRESHOLD, "p_elevated": p, "calls": calls,
             "unsure": not calls, "validated_area": inside, "km_from_answer_key_site": None if km is None else round(km, 1),
             "n_stations": len(set(rows["station_id"])), "n_hours": len(probs)}
@@ -146,8 +152,9 @@ def text(ak: Optional[dict]) -> tuple[str, str]:
     if not ak:
         return "", ""
     scope_en = ("validated near IIT Delhi" if ak["validated_area"]
-                else "validated near IIT Delhi only, not at this station")
-    scope_hi = "IIT दिल्ली के पास जाँचा गया" if ak["validated_area"] else "केवल IIT दिल्ली के पास जाँचा गया, इस स्टेशन पर नहीं"
+                else "not validated at this station; burning was right 18 of 20 times at a second site")
+    scope_hi = ("IIT दिल्ली के पास जाँचा गया" if ak["validated_area"]
+                else "इस स्टेशन पर जाँचा नहीं गया; दूसरी जगह जलाने की पहचान 20 में 18 बार सही रही")
     if ak["calls"]:
         en = f"Measured-source check (95%+ sure, {scope_en}): {', '.join(LABEL_EN[c] for c in ak['calls'])} elevated."
         hi = f"मापे गए स्रोतों से जाँच (95%+ निश्चित, {scope_hi}): {', '.join(LABEL_HI[c] for c in ak['calls'])} बढ़ा हुआ।"
