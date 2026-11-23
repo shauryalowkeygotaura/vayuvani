@@ -26,11 +26,22 @@ Training rows: {"asap/iitd/biomass_burning": 327, "rai/iitd/biomass_burning": 80
 
 | Source | Variant | Cutoff | Precision | Coverage |
 |---|---|---|---|---|
-| burning | Rai only, hourly (live today) | 0.95 | 97.5% | 40% |
+| burning | Rai only, hourly (old live) | 0.95 | 97.5% | 40% |
 | burning | pooled, 3h episodes | 0.85 | 97.5% | 67% |
-| burning | pooled, 3h episodes | 0.80 | 95.9% | 75% |
-| traffic | Rai only, hourly (live today) | 0.95 | 97.0% | 25% |
+| traffic | Rai only, hourly (live) | 0.95 | 97.0% | 25% |
 | traffic | pooled, 3h episodes | 0.90 | 99.0% | 32% |
-| traffic | Rai only, 3h episodes | 0.85 | 93.7% | 48% |
 
-About 16 settings were tried on the same weeks, so the best row is flattered. Confirm on a key it never saw before going live.
+About 16 settings were tried on these weeks, so the best rows are flattered.
+
+## Confirmation on unseen data: train on 2018 keys, test on Rai 2019
+
+| Source | Model | Cutoff | Hourly | 3h episodes |
+|---|---|---|---|---|
+| burning | pooled | 0.95 | 100%, 48% coverage | 100%, 49% |
+| burning | pooled | 0.85 | 97.7%, 66% | **99.2%, 69%** |
+| burning | Rai only | 0.95 | 97.1%, 25% | 100%, 24% |
+| traffic | pooled | 0.90 | 92.7%, 34% | 94.7%, 33% |
+| traffic | pooled | 0.95 | 96.6%, 18% | 100%, 17% |
+| traffic | Rai only | 0.95 | 92.5%, 29% | 93.6%, 28% |
+
+Shipped (model `pooled-v2`): burning uses the pooled model, with a 0.85 cutoff when a spike lasts 3+ hours and 0.95 otherwise. Traffic stays on Rai only at 0.95: pooling it did not hold up on 2019.

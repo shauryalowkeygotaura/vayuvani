@@ -64,3 +64,10 @@ def test_shipped_model_loads():
     m = A.load()
     assert m and set(m["validated"]) <= set(m["sources"])
     assert all(len(s["coef"]) == len(A.FEATURES) for s in m["sources"].values())
+
+
+def test_episode_cutoff_needs_enough_hours():
+    m = {"cutoffs": {"biomass_burning": {"3": 0.85}}}
+    assert A.cutoff(m, "biomass_burning", 2) == A.THRESHOLD
+    assert A.cutoff(m, "biomass_burning", 3) == 0.85
+    assert A.cutoff(m, "traffic", 6) == A.THRESHOLD

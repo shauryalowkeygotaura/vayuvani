@@ -89,8 +89,29 @@ def episodes(o, ex, s, h):
     return score(w.p.to_numpy(), (w.e >= R.UP).astype(int).to_numpy())
 
 
+def export(df):
+    with open(ak.MODEL_PATH, encoding="utf-8") as f:
+        m = json.load(f)
+    d = df[df.src == "biomass_burning"]
+    p = fit(d)
+    im, sc, lr = p.steps[0][1], p.steps[1][1], p.steps[2][1]
+    m["sources"]["biomass_burning"] = {"features": F, "coef": lr.coef_[0].round(5).tolist(),
+                                       "intercept": round(float(lr.intercept_[0]), 5),
+                                       "mean": sc.mean_.round(5).tolist(), "scale": sc.scale_.round(5).tolist(),
+                                       "impute": im.statistics_.round(5).tolist()}
+    m["version"] = "pooled-v2"
+    m["trained_on"] = ("burning: Rai 2020 Xact + Wang 2020 VOC (IITD, MRIU) + ASAP-Delhi; "
+                       "traffic, dust, industry: Rai 2020 only. CPCB hourly at the nearest stations.")
+    m["cutoffs"] = {"biomass_burning": {"3": 0.85}}
+    m["confirm_2019"] = {"biomass_burning": "trained on 2018 keys, tested on Rai 2019: 3h episodes at 0.85 "
+                                            "99.2% right, 69% coverage; hourly at 0.95 100%, 48%"}
+    with open(ak.MODEL_PATH, "w", encoding="utf-8") as f:
+        json.dump(m, f, indent=1)
+
+
 def main():
     df = data()
+    export(df)
     rai = R.family_excess(R.load_factors())
     res = {"rows": df.groupby(["key", "site", "src"]).size().to_dict()}
     for s in SRC:
