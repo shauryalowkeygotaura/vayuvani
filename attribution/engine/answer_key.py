@@ -112,6 +112,15 @@ def neighbours(sid: str, stations: dict) -> list[str]:
     return near or [sid]
 
 
+def cutoff(model: dict, src: str, n: int) -> float:
+    """Lower cutoff for multi-hour episodes where tests showed calls stay >= 95% right."""
+    c = THRESHOLD
+    for h, t in (model.get("cutoffs") or {}).get(src, {}).items():
+        if n >= int(h):
+            c = min(c, t)
+    return c
+
+
 def check(flagged: pd.DataFrame, sid: str, hours: list, stations: dict, model: Optional[dict] = None) -> Optional[dict]:
     """
     The answer-key verdict for one spike window: mean P(elevated) over its hours,
@@ -141,8 +150,9 @@ def check(flagged: pd.DataFrame, sid: str, hours: list, stations: dict, model: O
     validated = set(model.get("validated", []))
     if not inside:
         validated &= set(model.get("outside_validated", []))
-    calls = [k for k, v in sorted(p.items(), key=lambda kv: -kv[1]) if v >= THRESHOLD and k in validated]
-    return {"model": model.get("version"), "threshold": THRESHOLD, "p_elevated": p, "calls": calls,
+    cut = {k: cutoff(model, k, len(probs)) for k in p}
+    calls = [k for k, v in sorted(p.items(), key=lambda kv: -kv[1]) if v >= cut[k] and k in validated]
+    return {"model": model.get("version"), "threshold": THRESHOLD, "cutoffs": cut, "p_elevated": p, "calls": calls,
             "unsure": not calls, "validated_area": inside, "km_from_answer_key_site": None if km is None else round(km, 1),
             "n_stations": len(set(rows["station_id"])), "n_hours": len(probs)}
 
@@ -156,8 +166,8 @@ def text(ak: Optional[dict]) -> tuple[str, str]:
     scope_hi = ("IIT दिल्ली के पास जाँचा गया" if ak["validated_area"]
                 else "इस स्टेशन पर जाँचा नहीं गया; दूसरी जगह जलाने की पहचान 20 में 18 बार सही रही")
     if ak["calls"]:
-        en = f"Measured-source check (95%+ sure, {scope_en}): {', '.join(LABEL_EN[c] for c in ak['calls'])} elevated."
-        hi = f"मापे गए स्रोतों से जाँच (95%+ निश्चित, {scope_hi}): {', '.join(LABEL_HI[c] for c in ak['calls'])} बढ़ा हुआ।"
+        en = f"Measured-source check (calls like this were right 95%+ of the time in tests, {scope_en}): {', '.join(LABEL_EN[c] for c in ak['calls'])} elevated."
+        hi = f"मापे गए स्रोतों से जाँच (ऐसे अनुमान जाँच में 95%+ बार सही रहे, {scope_hi}): {', '.join(LABEL_HI[c] for c in ak['calls'])} बढ़ा हुआ।"
     else:
         en = f"Measured-source check: unsure, no source reaches 95% ({scope_en})."
         hi = f"मापे गए स्रोतों से जाँच: निश्चित नहीं, कोई स्रोत 95% तक नहीं पहुँचा ({scope_hi})।"

@@ -191,3 +191,9 @@ Every Delhi-NCR card now carries one extra sentence from `attribution/engine/ans
 So: near IIT Delhi both calls hold on independent instruments. Away from it burning mostly
 transfers and traffic does not (it is too local for monitors 6-10 km off). Cards outside 5 km of
 IIT Delhi therefore name burning only, and say it was 18 of 20 at a second site.
+
+## Pooled keys and episodes (2026-11-23)
+
+The burning model is now trained on every answer key (Rai Xact, Wang VOC at IIT Delhi and MRIU, ASAP). When a spike lasts 3 or more hours, it is called at P >= 0.85 instead of 0.95. Trained on 2018 and tested on 2019, those calls were right 99.2% of the time and covered 69% of clear episodes (the old model covered 40%). Traffic stays on Rai only at 0.95, because pooling it fell below 95% on 2019. Reports: `attribution/validation/NCR_REPORT.md`.
+
+During the 2020 lockdown (25 Mar to 14 Apr), the live model's traffic calls fell at 29 of 39 NCR stations. The median share of hours called traffic dropped from 5.6% in 2019 to 0%. That shows the direction is right across NCR, but it is not a precision number (`LOCKDOWN_REPORT.md`).

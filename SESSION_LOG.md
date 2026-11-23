@@ -94,3 +94,9 @@ Shaurya's ask: "pin point exactly what is causing the pollution, other than just
 - IIT Delhi VOC key: 84/84 traffic, 79/79 burning. MRIU: burning 18/20, traffic 75/127. ASAP burning 36/45 (definition gap: waste burning in its chloride factor).
 - Engine change: outside 5 km of IIT Delhi only burning is named; traffic suppressed. 144 tests pass.
 - Next: Faridabad/Gurugram keys with closer monitors; any key outside south Delhi.
+
+## 2026-11-23
+- Repo made public after a full-history secret scan. README cut to 16 lines.
+- `validation/ncr.py`: pooled answer keys and 3h episodes. Burning model is now `pooled-v2` with a 0.85 cutoff for spikes of 3h or more. 2018->2019 test: 99.2% right, 69% coverage (was 40%). Traffic unchanged.
+- `validation/lockdown.py`: traffic calls fell at 29/39 NCR stations in the 2020 lockdown.
+- Next: NCR-wide answer keys (Gani email, DPCC RTI); stubble/dust event labels.

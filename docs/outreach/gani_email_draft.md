@@ -1,4 +1,4 @@
-# DRAFT, do not send yet
+# SUPERSEDED (2026-11-23): do not send. Final versions live in the vault, Projects/vayuvani/outreach-final-2026-11-23.md
 
 Send only after: (1) the cron has run 7 days unattended, (2) `attribution/validation/REPORT.md` has real
 numbers from the Oct-Nov 2025 backfill, (3) Dr Gani's current address is verified on the IIT Delhi site.
